@@ -1,19 +1,13 @@
 app:
   name: AcumenAI 2.0
-  version: "0.1.0"
-
+  version: "0.2.0"
 storage:
-  root: ./data
-
+  root: /mnt/acumen/data
 memory:
   max_retrieval_results: 8
   min_score: 0.05
-
+reasoning:
+  max_depth: 4
 agent:
   auto_learn_user_statements: true
   save_conversations: true
-  reflection_enabled: true
-
-model:
-  backend: rule_based
-  model_name: none

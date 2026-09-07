@@ -1,99 +1,53 @@
-from __future__ import annotations
 from pathlib import Path
 from .memory import MemoryStore
-from .conversations import ConversationStore
-from .knowledge import KnowledgeIngestor
-from .planner import Planner
+from .graph import KnowledgeGraph
 from .learner import Learner
-from .model import RuleBasedBackend
-from .tools import build_tools
-
-class AcumenAgent:
-    def __init__(self, config: dict):
-        self.config = config
-        root = Path(config["storage"]["root"]).expanduser()
-        root.mkdir(parents=True, exist_ok=True)
-
-        self.memory = MemoryStore(root)
-        self.conversations = ConversationStore(root)
-        self.knowledge = KnowledgeIngestor(self.memory)
-        self.planner = Planner()
-        self.learner = Learner(self.memory)
-        self.tools = build_tools()
-        self.model = RuleBasedBackend()
-        self.root = root
-
-    def status(self) -> str:
-        memories = self.memory.all()
-        turns = self.conversations.recent(10_000)
-        return (
-            f"AcumenAI 2.0 status\n"
-            f"Storage: {self.root}\n"
-            f"Memories: {len(memories)}\n"
-            f"Conversation turns: {len(turns)}\n"
-            f"Model backend: {self.config['model']['backend']}"
-        )
-
-    def help(self) -> str:
-        return (
-            "/help\n/status\n/remember <text>\n/forget <memory_id>\n"
-            "/memories [query]\n/learn <text>\n/ingest <path>\n"
-            "/calc <expression>\n/sources\n/quit"
-        )
-
-    def handle(self, user_input: str) -> tuple[str, bool]:
-        plan = self.planner.plan(user_input)
-
-        if plan.action == "quit":
-            return "Shutting down.", True
-        if plan.action == "help":
-            return self.help(), False
-        if plan.action == "status":
-            return self.status(), False
-        if plan.action == "remember":
-            m = self.memory.add(plan.argument, kind="semantic", source="user", confidence=0.9)
-            return f"Stored memory {m['id']}: {m['text']}", False
-        if plan.action == "forget":
-            ok = self.memory.delete(plan.argument)
-            return ("Memory deleted." if ok else "Memory ID not found."), False
-        if plan.action == "memories":
-            items = self.memory.search(plan.argument) if plan.argument else self.memory.all()[-20:]
-            if not items:
-                return "No matching memories.", False
-            return "\n".join(
-                f"{m['id']} | {m['kind']} | {m['text']}"
-                + (f" | score={m['score']}" if "score" in m else "")
-                for m in items
-            ), False
-        if plan.action == "learn":
-            items = self.knowledge.ingest_text(plan.argument, source="manual")
-            return f"Learned {len(items)} knowledge chunk(s).", False
-        if plan.action == "ingest_file":
-            try:
-                items = self.knowledge.ingest_file(plan.argument)
-                return f"Ingested {len(items)} chunk(s) from {plan.argument}.", False
-            except Exception as e:
-                return f"Ingest failed: {e}", False
-        if plan.action.startswith("tool:"):
-            name = plan.action.split(":", 1)[1]
-            result = self.tools[name].run(plan.argument)
-            return result.output, False
-        if plan.action == "sources":
-            sources = sorted(set(m.get("source", "unknown") for m in self.memory.all()))
-            return ("\n".join(sources) if sources else "No sources stored."), False
-
-        self.conversations.add_turn("user", user_input)
-        max_results = int(self.config["memory"]["max_retrieval_results"])
-        min_score = float(self.config["memory"]["min_score"])
-        memories = self.memory.search(user_input, max_results, min_score)
-        recent = self.conversations.recent(12)
-
-        response = self.model.generate(user_input, memories, recent)
-        self.conversations.add_turn("assistant", response, {"used_memory_ids": [m["id"] for m in memories]})
-
-        if self.config["agent"]["auto_learn_user_statements"]:
-            self.learner.maybe_learn_user_statement(user_input)
-        if self.config["agent"]["reflection_enabled"]:
-            self.learner.reflect(user_input, response, memories)
-
-        return response, False
+from .reasoning import Reasoner
+from .query import relation_query,boolean_query
+from .tools import calculate
+class Agent:
+    def __init__(self,cfg):
+        self.cfg=cfg; self.root=Path(cfg['storage']['root']).expanduser(); self.root.mkdir(parents=True,exist_ok=True)
+        self.m=MemoryStore(self.root); self.g=KnowledgeGraph(self.root); self.l=Learner(self.m,self.g); self.r=Reasoner(self.g,int(cfg['reasoning']['max_depth'])); self.last_m=[]; self.last_f=[]
+    def status(self): return f"AcumenAI 2.0 v0.2\nStorage: {self.root}\nMemories: {len(self.m.all())}\nFacts: {len(self.g.all())}\nLLM: none\nReasoning: symbolic"
+    def handle(self,t):
+        x=t.strip(); low=x.lower()
+        if low in {'/quit','/exit'}:return 'Shutting down.',True
+        if low=='/help':return '/status /remember /forget /memories /learn /facts /why /calc /feedback good /quit',False
+        if low=='/status':return self.status(),False
+        if low.startswith('/remember '):self.m.add(x[10:].strip(),confidence=.9);return 'Stored.',False
+        if low.startswith('/forget '):return ('Memory deleted.' if self.m.delete(x[8:].strip()) else 'Memory ID not found.'),False
+        if low.startswith('/memories'):
+            q=x[len('/memories'):].strip(); a=self.m.search(q) if q else self.m.all()[-20:]; return ('No matching memories.' if not a else '\n'.join(f"{m['id']} | {m['text']}" for m in a)),False
+        if low.startswith('/learn '):
+            tri,_,_=self.l.learn(x[7:].strip(),'manual',.95); return ('Learned: '+'; '.join(f'{s} --{r}--> {o}' for s,r,o in tri)) if tri else "Stored, but I couldn't extract a structured fact.",False
+        if low.startswith('/facts'):
+            q=x[len('/facts'):].strip().lower(); fs=self.g.all(); fs=[f for f in fs if not q or q in f['subject'] or q in f['relation'] or q in f['object']]; return ('No matching facts.' if not fs else '\n'.join(f"{f['subject']} --{f['relation']}--> {f['object']}" for f in fs[-50:])),False
+        if low.startswith('/calc '):
+            try:return calculate(x[6:].strip()),False
+            except Exception as e:return f'Calculator error: {e}',False
+        if low.startswith('/feedback '):
+            if x[10:].strip().lower()=='good':self.l.reinforce(self.last_m,self.last_f);return 'Reinforced the knowledge used in my previous answer.',False
+            return 'Feedback recorded.',False
+        if low.startswith('/why '):
+            b=boolean_query(x[5:].strip())
+            if b:
+                ok,path,ids=self.r.entails(*b);return self.r.explain(path),False
+            return "I couldn't parse that explanation query yet.",False
+        rq=relation_query(x)
+        if rq:
+            s,r=rq; ans,ids,path=self.r.relation(s,r); self.last_f=ids; self.last_m=[]
+            if not ans:return "I don't know that yet.",False
+            if r=='capital_of':return f"The capital of {s.title()} is {ans[0].title()}.",False
+            if r=='located_in':return f"{s.title()} is in {ans[0].title()}.",False
+            if r=='created_by':return f"{s.title()} was created by {ans[0].title()}.",False
+        bq=boolean_query(x) if x.endswith('?') else None
+        if bq:
+            ok,path,ids=self.r.entails(*bq); self.last_f=ids; self.last_m=[]; s,r,o=bq
+            return (f"Yes. {s.title()} is a {o}." if ok else f"I can't prove that {s.title()} is a {o}."),False
+        if not x.endswith('?') and self.cfg['agent']['auto_learn_user_statements']:
+            tri,facts,_=self.l.learn(x,'conversation',.75); self.last_f=[f['id'] for f in facts]; self.last_m=[]
+            return ('Learned: '+'; '.join(f'{s} --{r}--> {o}' for s,r,o in tri)) if tri else 'Stored that as memory.',False
+        mem=self.m.search(x,int(self.cfg['memory']['max_retrieval_results']),float(self.cfg['memory']['min_score'])); self.last_m=[m['id'] for m in mem]; self.last_f=[]
+        if mem:self.m.touch(self.last_m);return 'I found related memory:\n'+'\n'.join('- '+m['text'] for m in mem[:4]),False
+        return "I don't know that yet. Teach me with a statement or /learn.",False
