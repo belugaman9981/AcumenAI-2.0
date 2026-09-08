@@ -1,8 +1,3 @@
-from .calculator import CalculatorTool
-from .files import FileReadTool
+from .calculator import calculate
 
-def build_tools():
-    return {
-        "calculator": CalculatorTool(),
-        "file_read": FileReadTool(),
-    }
+__all__ = ["calculate"]

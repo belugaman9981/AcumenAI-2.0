@@ -1,6 +1,6 @@
 app:
   name: AcumenAI 2.0
-  version: "0.2.0"
+  version: "0.2.1"
 storage:
   root: /mnt/acumen/data
 memory:

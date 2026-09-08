@@ -45,3 +45,12 @@ What is the capital of Canada?
 Are whales warm-blooded?
 /why Are whales warm-blooded?
 ```
+
+
+## v0.2.1 install note
+
+If you previously installed v0.1/v0.2 into the same folder, remove the old code
+before copying this version. Keep only your `data/` directory.
+
+This release uses `acumen/tools/` as a package, which fixes the
+`cannot import name 'calculate' from 'acumen.tools'` error caused by mixed versions.

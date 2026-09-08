@@ -9,7 +9,7 @@ class Agent:
     def __init__(self,cfg):
         self.cfg=cfg; self.root=Path(cfg['storage']['root']).expanduser(); self.root.mkdir(parents=True,exist_ok=True)
         self.m=MemoryStore(self.root); self.g=KnowledgeGraph(self.root); self.l=Learner(self.m,self.g); self.r=Reasoner(self.g,int(cfg['reasoning']['max_depth'])); self.last_m=[]; self.last_f=[]
-    def status(self): return f"AcumenAI 2.0 v0.2\nStorage: {self.root}\nMemories: {len(self.m.all())}\nFacts: {len(self.g.all())}\nLLM: none\nReasoning: symbolic"
+    def status(self): return f"AcumenAI 2.0 v0.2.1\nStorage: {self.root}\nMemories: {len(self.m.all())}\nFacts: {len(self.g.all())}\nLLM: none\nReasoning: symbolic"
     def handle(self,t):
         x=t.strip(); low=x.lower()
         if low in {'/quit','/exit'}:return 'Shutting down.',True
