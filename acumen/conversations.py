@@ -1,4 +1,3 @@
-from __future__ import annotations
 from pathlib import Path
 import uuid
 from .storage import JSONLStore, utc_now
@@ -7,7 +6,7 @@ class ConversationStore:
     def __init__(self, root: Path):
         self.store = JSONLStore(root / "conversations.jsonl")
 
-    def add_turn(self, role: str, text: str, metadata: dict | None = None) -> dict:
+    def add(self, role, text, metadata=None):
         item = {
             "id": str(uuid.uuid4()),
             "role": role,
@@ -18,5 +17,5 @@ class ConversationStore:
         self.store.append(item)
         return item
 
-    def recent(self, limit: int = 20) -> list[dict]:
+    def recent(self, limit=20):
         return self.store.read_all()[-limit:]

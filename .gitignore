@@ -1,5 +1,7 @@
 .venv/
+.verifier-venv/
 __pycache__/
 *.pyc
 config.yaml
 data/
+.DS_Store

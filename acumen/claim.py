@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 import re
-from .relations import canonical_relation
-from .text import normalize
+from .text import canonical_entity
 
 @dataclass
-class Triple:
+class Claim:
     subject: str
     relation: str
     object: str
-    confidence: float = 0.85
+    raw: str
 
 PATTERNS = [
     (re.compile(r"^(.+?)\s+is\s+the\s+capital\s+of\s+(.+?)[.!]?$", re.I), "capital_of"),
@@ -19,19 +18,16 @@ PATTERNS = [
     (re.compile(r"^all\s+(.+?)\s+are\s+(.+?)[.!]?$", re.I), "is_a"),
     (re.compile(r"^(.+?)\s+is\s+(?:a|an)\s+(.+?)[.!]?$", re.I), "is_a"),
     (re.compile(r"^(.+?)\s+are\s+(?:a|an)?\s*(.+?)[.!]?$", re.I), "is_a"),
-    (re.compile(r"^(.+?)\s+has\s+(.+?)[.!]?$", re.I), "has"),
 ]
 
-def clean_entity(value):
-    return normalize(value).strip(" .?!").lower()
-
-def extract_triples(text):
-    n = normalize(text)
+def extract_claim(text):
     for rx, relation in PATTERNS:
-        m = rx.match(n)
+        m = rx.match(text.strip())
         if m:
-            s = clean_entity(m.group(1))
-            o = clean_entity(m.group(2))
-            if s and o and s != o:
-                return [Triple(s, canonical_relation(relation), o)]
-    return []
+            return Claim(
+                canonical_entity(m.group(1)),
+                relation,
+                canonical_entity(m.group(2)),
+                text.strip(),
+            )
+    return None

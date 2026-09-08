@@ -1,53 +1,168 @@
 from pathlib import Path
+from .gate import classify_input
+from .claim import extract_claim, Claim
 from .memory import MemoryStore
 from .graph import KnowledgeGraph
-from .learner import Learner
+from .verification_queue import VerificationQueue
 from .reasoning import Reasoner
-from .query import relation_query,boolean_query
+from .query import parse_relation_query, parse_boolean_query
+from .response import greeting, thanks, farewell, verification_message, titleish
 from .tools import calculate
-class Agent:
-    def __init__(self,cfg):
-        self.cfg=cfg; self.root=Path(cfg['storage']['root']).expanduser(); self.root.mkdir(parents=True,exist_ok=True)
-        self.m=MemoryStore(self.root); self.g=KnowledgeGraph(self.root); self.l=Learner(self.m,self.g); self.r=Reasoner(self.g,int(cfg['reasoning']['max_depth'])); self.last_m=[]; self.last_f=[]
-    def status(self): return f"AcumenAI 2.0 v0.2.1\nStorage: {self.root}\nMemories: {len(self.m.all())}\nFacts: {len(self.g.all())}\nLLM: none\nReasoning: symbolic"
-    def handle(self,t):
-        x=t.strip(); low=x.lower()
-        if low in {'/quit','/exit'}:return 'Shutting down.',True
-        if low=='/help':return '/status /remember /forget /memories /learn /facts /why /calc /feedback good /quit',False
-        if low=='/status':return self.status(),False
-        if low.startswith('/remember '):self.m.add(x[10:].strip(),confidence=.9);return 'Stored.',False
-        if low.startswith('/forget '):return ('Memory deleted.' if self.m.delete(x[8:].strip()) else 'Memory ID not found.'),False
-        if low.startswith('/memories'):
-            q=x[len('/memories'):].strip(); a=self.m.search(q) if q else self.m.all()[-20:]; return ('No matching memories.' if not a else '\n'.join(f"{m['id']} | {m['text']}" for m in a)),False
-        if low.startswith('/learn '):
-            tri,_,_=self.l.learn(x[7:].strip(),'manual',.95); return ('Learned: '+'; '.join(f'{s} --{r}--> {o}' for s,r,o in tri)) if tri else "Stored, but I couldn't extract a structured fact.",False
-        if low.startswith('/facts'):
-            q=x[len('/facts'):].strip().lower(); fs=self.g.all(); fs=[f for f in fs if not q or q in f['subject'] or q in f['relation'] or q in f['object']]; return ('No matching facts.' if not fs else '\n'.join(f"{f['subject']} --{f['relation']}--> {f['object']}" for f in fs[-50:])),False
-        if low.startswith('/calc '):
-            try:return calculate(x[6:].strip()),False
-            except Exception as e:return f'Calculator error: {e}',False
-        if low.startswith('/feedback '):
-            if x[10:].strip().lower()=='good':self.l.reinforce(self.last_m,self.last_f);return 'Reinforced the knowledge used in my previous answer.',False
-            return 'Feedback recorded.',False
-        if low.startswith('/why '):
-            b=boolean_query(x[5:].strip())
+
+class AcumenAgent:
+    def __init__(self, config):
+        self.config = config
+        self.root = Path(config["storage"]["root"]).expanduser()
+        self.root.mkdir(parents=True, exist_ok=True)
+
+        self.memory = MemoryStore(self.root)
+        self.graph = KnowledgeGraph(self.root)
+        self.verify_queue = VerificationQueue(self.root)
+        self.reasoner = Reasoner(self.graph, int(config["reasoning"]["max_depth"]))
+
+    def status(self):
+        return (
+            "AcumenAI 2.0 v0.3.0\n"
+            f"Storage: {self.root}\n"
+            f"Trusted facts: {len(self.graph.all())}\n"
+            f"Memories: {len(self.memory.all())}\n"
+            f"Web verification: {'enabled' if self.config['verification']['enabled'] else 'disabled'}\n"
+            "LLM: none"
+        )
+
+    def help(self):
+        return (
+            "/help\n/status\n/facts\n/memories [query]\n"
+            "/verify <claim>\n/why <question>\n/calc <expression>\n/quit"
+        )
+
+    def _verify_claim(self, claim):
+        if not self.config["verification"]["enabled"]:
+            return "Web verification is disabled."
+
+        job_id = self.verify_queue.submit(claim)
+        result = self.verify_queue.wait_for_result(
+            job_id,
+            timeout=float(self.config["verification"]["wait_seconds"]),
+            poll_interval=float(self.config["verification"]["poll_interval"]),
+        )
+
+        if result is None:
+            return (
+                "I queued that claim for verification, but the verifier did not answer in time. "
+                "Make sure verifier_worker.py is running on the Windows PC."
+            )
+
+        self.verify_queue.consume_result(job_id)
+
+        min_conf = float(self.config["verification"]["minimum_confidence"])
+        if result.get("status") == "verified" and float(result.get("confidence", 0)) >= min_conf:
+            subject = result.get("corrected_subject") or result["claimed_subject"]
+            obj = result.get("corrected_object") or result["claimed_object"]
+            self.graph.add_verified(
+                subject,
+                result["relation"],
+                obj,
+                result["confidence"],
+                result.get("evidence", []),
+            )
+
+        # Keep verification outcome as episodic evidence, not trusted fact.
+        self.memory.add(
+            claim.raw,
+            kind="verification",
+            source="web_verifier",
+            confidence=float(result.get("confidence", 0)),
+            metadata={
+                "verification_status": result.get("status"),
+                "evidence": result.get("evidence", []),
+            },
+        )
+        return verification_message(result)
+
+    def handle(self, text):
+        raw = text.strip()
+        low = raw.lower()
+
+        if low in {"/quit", "/exit"}:
+            return "Shutting down.", True
+        if low == "/help":
+            return self.help(), False
+        if low == "/status":
+            return self.status(), False
+        if low == "/facts":
+            facts = self.graph.all()
+            if not facts:
+                return "No trusted facts yet.", False
+            return "\n".join(
+                f"{f['subject']} --{f['relation']}--> {f['object']} "
+                f"(confidence {f['confidence']:.2f})"
+                for f in facts[-50:]
+            ), False
+        if low.startswith("/memories"):
+            q = raw[len("/memories"):].strip()
+            items = self.memory.search(q) if q else self.memory.all()[-20:]
+            if not items:
+                return "No matching memories.", False
+            return "\n".join(f"{m['kind']}: {m['text']}" for m in items), False
+        if low.startswith("/calc "):
+            try:
+                return calculate(raw[6:].strip()), False
+            except Exception as e:
+                return f"Calculator error: {e}", False
+        if low.startswith("/verify "):
+            claim = extract_claim(raw[8:].strip())
+            if not claim:
+                return "I couldn't convert that sentence into a structured claim yet.", False
+            return self._verify_claim(claim), False
+        if low.startswith("/why "):
+            q = raw[5:].strip()
+            b = parse_boolean_query(q)
             if b:
-                ok,path,ids=self.r.entails(*b);return self.r.explain(path),False
-            return "I couldn't parse that explanation query yet.",False
-        rq=relation_query(x)
-        if rq:
-            s,r=rq; ans,ids,path=self.r.relation(s,r); self.last_f=ids; self.last_m=[]
-            if not ans:return "I don't know that yet.",False
-            if r=='capital_of':return f"The capital of {s.title()} is {ans[0].title()}.",False
-            if r=='located_in':return f"{s.title()} is in {ans[0].title()}.",False
-            if r=='created_by':return f"{s.title()} was created by {ans[0].title()}.",False
-        bq=boolean_query(x) if x.endswith('?') else None
-        if bq:
-            ok,path,ids=self.r.entails(*bq); self.last_f=ids; self.last_m=[]; s,r,o=bq
-            return (f"Yes. {s.title()} is a {o}." if ok else f"I can't prove that {s.title()} is a {o}."),False
-        if not x.endswith('?') and self.cfg['agent']['auto_learn_user_statements']:
-            tri,facts,_=self.l.learn(x,'conversation',.75); self.last_f=[f['id'] for f in facts]; self.last_m=[]
-            return ('Learned: '+'; '.join(f'{s} --{r}--> {o}' for s,r,o in tri)) if tri else 'Stored that as memory.',False
-        mem=self.m.search(x,int(self.cfg['memory']['max_retrieval_results']),float(self.cfg['memory']['min_score'])); self.last_m=[m['id'] for m in mem]; self.last_f=[]
-        if mem:self.m.touch(self.last_m);return 'I found related memory:\n'+'\n'.join('- '+m['text'] for m in mem[:4]),False
-        return "I don't know that yet. Teach me with a statement or /learn.",False
+                found, path = self.reasoner.entails(*b)
+                return self.reasoner.explain(path), False
+            r = parse_relation_query(q)
+            if r:
+                answers, path = self.reasoner.relation(*r)
+                return self.reasoner.explain(path), False
+            return "I couldn't parse that explanation query.", False
+
+        gate = classify_input(raw)
+
+        if gate.kind == "greeting":
+            return greeting(), False
+        if gate.kind == "thanks":
+            return thanks(), False
+        if gate.kind == "farewell":
+            return farewell(), False
+
+        # First answer trusted factual questions from the Pi's graph.
+        relation_q = parse_relation_query(raw)
+        if relation_q:
+            subject, relation = relation_q
+            answers, facts = self.reasoner.relation(subject, relation)
+            if answers:
+                answer = answers[0]
+                if relation == "capital_of":
+                    return f"The capital of {titleish(subject)} is {titleish(answer)}.", False
+                return f"{titleish(subject)} {relation.replace('_', ' ')} {titleish(answer)}.", False
+            return "I don't have a verified answer for that yet.", False
+
+        boolean_q = parse_boolean_query(raw)
+        if boolean_q:
+            found, path = self.reasoner.entails(*boolean_q)
+            if found:
+                return "Yes. I can support that from my verified knowledge.", False
+            return "I can't prove that from my verified knowledge.", False
+
+        # Claims go through web verification before entering trusted knowledge.
+        if gate.kind == "claim":
+            claim = extract_claim(raw)
+            if claim:
+                return self._verify_claim(claim), False
+            self.memory.add(raw, kind="conversation", confidence=0.25)
+            return "I understood that as a statement, but I couldn't structure it well enough to verify it yet.", False
+
+        # Ordinary conversation is not treated as factual knowledge.
+        self.memory.add(raw, kind="conversation", confidence=0.20)
+        return "I don't have a conversational rule for that yet.", False

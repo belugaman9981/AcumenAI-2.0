@@ -2,15 +2,10 @@ import ast
 import operator as op
 
 OPS = {
-    ast.Add: op.add,
-    ast.Sub: op.sub,
-    ast.Mult: op.mul,
-    ast.Div: op.truediv,
-    ast.FloorDiv: op.floordiv,
-    ast.Mod: op.mod,
-    ast.Pow: op.pow,
-    ast.USub: op.neg,
-    ast.UAdd: op.pos,
+    ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
+    ast.Div: op.truediv, ast.FloorDiv: op.floordiv,
+    ast.Mod: op.mod, ast.Pow: op.pow,
+    ast.USub: op.neg, ast.UAdd: op.pos,
 }
 
 def _eval(node):
@@ -24,5 +19,5 @@ def _eval(node):
         return OPS[type(node.op)](_eval(node.operand))
     raise ValueError("unsupported expression")
 
-def calculate(expression: str) -> str:
+def calculate(expression):
     return str(_eval(ast.parse(expression, mode="eval")))

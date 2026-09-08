@@ -1,13 +1,19 @@
 app:
   name: AcumenAI 2.0
-  version: "0.2.1"
+  version: "0.3.0"
+
 storage:
   root: /mnt/acumen/data
+
+verification:
+  enabled: true
+  wait_seconds: 15
+  poll_interval: 0.25
+  minimum_confidence: 0.75
+
 memory:
   max_retrieval_results: 8
   min_score: 0.05
+
 reasoning:
   max_depth: 4
-agent:
-  auto_learn_user_statements: true
-  save_conversations: true
