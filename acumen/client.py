@@ -15,6 +15,7 @@ class AcumenClient:
         self.session_id = self.session_store.create()
         self.local_processor = TaskProcessor(root, config) if mode == "local" else None
         self.knowledge = KnowledgeStore(root)
+        self.show_sources = True
 
     def _execute(self, task_type, query):
         payload = {"query": query}
@@ -40,9 +41,11 @@ class AcumenClient:
         self.queue.consume(task_id)
         return result
 
-    @staticmethod
-    def _format(result):
+    def _format(self, result):
         answer = result.get("answer", "No answer.")
+        if not self.show_sources:
+            return answer
+
         sources = result.get("sources", [])
         if sources:
             unique = []
@@ -76,8 +79,15 @@ class AcumenClient:
                     f"Mode: {self.mode}\n"
                     f"Session: {self.session_id}\n"
                     f"Storage root: {self.root}\n"
-                    f"Permanent knowledge items: {len(self.knowledge.all())}"
+                    f"Permanent knowledge items: {len(self.knowledge.all())}\n"
+                    f"Sources: {'shown' if self.show_sources else 'hidden'}"
                 )
+            if low in {"/hide-source", "/hide-sources"}:
+                self.show_sources = False
+                return "Sources are now hidden."
+            if low in {"/show-source", "/show-sources"}:
+                self.show_sources = True
+                return "Sources are now shown."
             if low == "/knowledge":
                 items = self.knowledge.all()
                 if not items:
@@ -91,7 +101,12 @@ class AcumenClient:
                 return "Deleted." if self.knowledge.delete(item_id) else "Knowledge ID not found."
             if low == "/help":
                 return (
-                    "/status\n/knowledge\n/delete <id>\n/quit\n"
+                    "/status\n"
+                    "/hide-source\n"
+                    "/show-source\n"
+                    "/knowledge\n"
+                    "/delete <id>\n"
+                    "/quit\n"
                     "Or ask any web/homework/research question."
                 )
             return "Unknown command. Type /help."

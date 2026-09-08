@@ -1,4 +1,4 @@
-# AcumenAI 2.0 — v0.4.0
+# AcumenAI 2.0 — v0.4.1
 
 A lightweight, non-LLM agent that can run in two modes:
 
@@ -45,6 +45,27 @@ find the latest information about Raspberry Pi 5
 
 For arbitrary web questions, Acumen searches the web, opens a few result pages,
 extracts relevant sentences, and returns an evidence-based answer without an LLM.
+
+
+## Source display mode
+
+Sources are shown by default.
+
+Hide them for the current Acumen session:
+
+```text
+/hide-source
+```
+
+Show them again:
+
+```text
+/show-source
+```
+
+Aliases `/hide-sources` and `/show-sources` also work.
+
+This only changes what Acumen prints. Source metadata is still retained with research results and candidate knowledge so it can be reviewed before saving.
 
 ## Temporary learning and save-on-exit
 
