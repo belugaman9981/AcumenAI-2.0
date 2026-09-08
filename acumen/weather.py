@@ -32,10 +32,40 @@ WEATHER_CODES = {
     99: "thunderstorm with heavy hail",
 }
 
+CANADA_PROVINCES = {
+    "AB": "Alberta",
+    "BC": "British Columbia",
+    "MB": "Manitoba",
+    "NB": "New Brunswick",
+    "NL": "Newfoundland and Labrador",
+    "NS": "Nova Scotia",
+    "NT": "Northwest Territories",
+    "NU": "Nunavut",
+    "ON": "Ontario",
+    "PE": "Prince Edward Island",
+    "QC": "Quebec",
+    "SK": "Saskatchewan",
+    "YT": "Yukon",
+}
+
+US_STATES = {
+    "AL":"Alabama","AK":"Alaska","AZ":"Arizona","AR":"Arkansas","CA":"California",
+    "CO":"Colorado","CT":"Connecticut","DE":"Delaware","FL":"Florida","GA":"Georgia",
+    "HI":"Hawaii","ID":"Idaho","IL":"Illinois","IN":"Indiana","IA":"Iowa",
+    "KS":"Kansas","KY":"Kentucky","LA":"Louisiana","ME":"Maine","MD":"Maryland",
+    "MA":"Massachusetts","MI":"Michigan","MN":"Minnesota","MS":"Mississippi",
+    "MO":"Missouri","MT":"Montana","NE":"Nebraska","NV":"Nevada","NH":"New Hampshire",
+    "NJ":"New Jersey","NM":"New Mexico","NY":"New York","NC":"North Carolina",
+    "ND":"North Dakota","OH":"Ohio","OK":"Oklahoma","OR":"Oregon","PA":"Pennsylvania",
+    "RI":"Rhode Island","SC":"South Carolina","SD":"South Dakota","TN":"Tennessee",
+    "TX":"Texas","UT":"Utah","VT":"Vermont","VA":"Virginia","WA":"Washington",
+    "WV":"West Virginia","WI":"Wisconsin","WY":"Wyoming","DC":"District of Columbia",
+}
+
 LOCATION_PATTERNS = [
-    re.compile(r"\bweather\s+(?:in|for|at)\s+(.+?)[?!.]*$", re.I),
-    re.compile(r"\bforecast\s+(?:in|for|at)\s+(.+?)[?!.]*$", re.I),
-    re.compile(r"\btemperature\s+(?:in|for|at)\s+(.+?)[?!.]*$", re.I),
+    re.compile(r"\bweather\s+(?:in|for|at)\s+(.+)$", re.I),
+    re.compile(r"\bforecast\s+(?:in|for|at)\s+(.+)$", re.I),
+    re.compile(r"\btemperature\s+(?:in|for|at)\s+(.+)$", re.I),
 ]
 
 def extract_location(text):
@@ -44,7 +74,6 @@ def extract_location(text):
         m = rx.search(value)
         if m:
             return m.group(1).strip(" ?!.,")
-    # fallback: remove common weather wording and use remainder
     cleaned = re.sub(
         r"\b(what|what's|whats|is|the|weather|temperature|forecast|today|right now|currently)\b",
         " ",
@@ -54,35 +83,128 @@ def extract_location(text):
     cleaned = " ".join(cleaned.split()).strip(" ?!.,")
     return cleaned or None
 
+def parse_location_hint(location):
+    """
+    Convert input such as:
+      Vancouver BC
+      Vancouver, BC
+      Toronto ON
+      Seattle WA
+    into a city query plus optional region/country hints.
+
+    Open-Meteo's geocoder is much more reliable when searching for the city name
+    itself rather than 'city + province abbreviation'.
+    """
+    raw = " ".join(location.strip(" ,").split())
+    if not raw:
+        return None, None, None
+
+    # Commas are not required. Treat a final 2-letter token as a regional hint.
+    m = re.match(r"^(.*?)[,\s]+([A-Za-z]{2})$", raw)
+    if m:
+        city = m.group(1).strip(" ,")
+        code = m.group(2).upper()
+        if code in CANADA_PROVINCES:
+            return city, CANADA_PROVINCES[code], "CA"
+        if code in US_STATES:
+            return city, US_STATES[code], "US"
+
+    low = raw.lower()
+    for code, name in CANADA_PROVINCES.items():
+        nlow = name.lower()
+        if low.endswith(" " + nlow) or low.endswith(", " + nlow):
+            city = raw[: -len(name)].rstrip(" ,")
+            return city, name, "CA"
+
+    for code, name in US_STATES.items():
+        nlow = name.lower()
+        if low.endswith(" " + nlow) or low.endswith(", " + nlow):
+            city = raw[: -len(name)].rstrip(" ,")
+            return city, name, "US"
+
+    if low.endswith(" canada"):
+        return raw[:-7].rstrip(" ,"), None, "CA"
+    if low.endswith(" united states"):
+        return raw[:-14].rstrip(" ,"), None, "US"
+    if low.endswith(" usa"):
+        return raw[:-3].rstrip(" ,"), None, "US"
+
+    return raw, None, None
+
+def score_geocode_result(item, city, region_hint=None, country_hint=None):
+    score = 0.0
+    name = str(item.get("name", "")).strip().lower()
+    admin1 = str(item.get("admin1", "")).strip().lower()
+    country_code = str(item.get("country_code", "")).strip().upper()
+
+    if name == city.strip().lower():
+        score += 5.0
+    elif city.strip().lower() in name:
+        score += 2.0
+
+    if region_hint:
+        rh = region_hint.lower()
+        if admin1 == rh:
+            score += 5.0
+        elif rh in admin1 or admin1 in rh:
+            score += 3.0
+
+    if country_hint:
+        if country_code == country_hint:
+            score += 4.0
+        else:
+            score -= 2.0
+
+    population = item.get("population")
+    if isinstance(population, (int, float)) and population > 0:
+        # Small tie-breaker only.
+        score += min(1.0, population / 10_000_000)
+
+    return score
+
 class WeatherProvider:
     def __init__(self, timeout=10):
         self.timeout = timeout
         self.s = requests.Session()
-        self.s.headers.update({"User-Agent": "AcumenAI/0.4.3 local weather client"})
+        self.s.headers.update({"User-Agent": "AcumenAI/0.4.4 local weather client"})
 
     def geocode(self, location):
-        r = self.s.get(
-            "https://geocoding-api.open-meteo.com/v1/search",
-            params={
-                "name": location,
-                "count": 5,
-                "language": "en",
-                "format": "json",
-            },
-            timeout=self.timeout,
-        )
-        r.raise_for_status()
-        results = r.json().get("results") or []
+        city, region_hint, country_hint = parse_location_hint(location)
+        if not city:
+            return None
+
+        def search(name):
+            r = self.s.get(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params={
+                    "name": name,
+                    "count": 10,
+                    "language": "en",
+                    "format": "json",
+                },
+                timeout=self.timeout,
+            )
+            r.raise_for_status()
+            return r.json().get("results") or []
+
+        # First try the clean city name.
+        results = search(city)
+
+        # Fallback to the original input if the city-only search has no matches.
+        if not results and city.lower() != location.lower():
+            results = search(location)
+
         if not results:
             return None
 
-        # Prefer a city/locality result in Canada when the query explicitly says BC/Canada.
-        q = location.lower()
-        if "bc" in q or "british columbia" in q or "canada" in q:
-            for item in results:
-                if str(item.get("country_code", "")).upper() == "CA":
-                    return item
-        return results[0]
+        ranked = sorted(
+            results,
+            key=lambda item: score_geocode_result(
+                item, city, region_hint=region_hint, country_hint=country_hint
+            ),
+            reverse=True,
+        )
+        return ranked[0] if ranked else None
 
     def current(self, location):
         place = self.geocode(location)

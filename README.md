@@ -1,5 +1,27 @@
 
-## v0.4.3 live weather fix
+## v0.4.4 location fix
+
+The live-weather geocoder now understands province/state abbreviations and separates
+them from the city before querying Open-Meteo.
+
+Examples now supported:
+
+```text
+Vancouver BC
+Vancouver, BC
+Toronto ON
+Calgary AB
+Seattle WA
+New York NY
+```
+
+For `Vancouver BC`, Acumen searches the geocoder for `Vancouver` and then ranks the
+results using the `British Columbia` + `Canada` hints instead of sending the literal
+string `Vancouver BC` as the city name.
+
+
+
+## v0.4.4 live weather fix
 
 Weather is no longer treated as a generic web-research question.
 
@@ -17,11 +39,11 @@ only receives and displays the answer.
 
 Weather is deliberately **not** stored as learned permanent knowledge because it becomes stale.
 
-v0.4.3 also fixes the startup banner so it reads the package version instead of using
+v0.4.4 also fixes the startup banner so it reads the package version instead of using
 a hard-coded old version string.
 
 
-# AcumenAI 2.0 — v0.4.3
+# AcumenAI 2.0 — v0.4.4
 
 A lightweight, non-LLM agent that can run in two modes:
 
@@ -71,7 +93,7 @@ extracts relevant sentences, and returns an evidence-based answer without an LLM
 
 
 
-## v0.4.3 research fix
+## v0.4.4 research fix
 
 The research engine now uses multiple retrieval paths instead of depending on one
 DuckDuckGo HTML page:
