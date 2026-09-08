@@ -2,6 +2,7 @@ from pathlib import Path
 import argparse
 from .config import load_config
 from .client import AcumenClient
+from . import __version__
 
 def main():
     ap = argparse.ArgumentParser()
@@ -16,7 +17,7 @@ def main():
 
     client = AcumenClient(args.mode, root, cfg)
 
-    print("AcumenAI 2.0 v0.4.0")
+    print(f"AcumenAI 2.0 v{__version__}")
     print(f"Mode: {args.mode}")
     if args.mode == "pi":
         print("Pi is answer-only; persistent learning lives on the local computer.")

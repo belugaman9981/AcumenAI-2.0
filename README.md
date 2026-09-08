@@ -1,4 +1,27 @@
-# AcumenAI 2.0 — v0.4.1
+
+## v0.4.3 live weather fix
+
+Weather is no longer treated as a generic web-research question.
+
+Requests such as:
+
+```text
+what is the weather in Vancouver BC
+weather in Toronto
+temperature in Seattle
+forecast for London
+```
+
+are routed to a dedicated live weather provider on the local computer. The Pi still
+only receives and displays the answer.
+
+Weather is deliberately **not** stored as learned permanent knowledge because it becomes stale.
+
+v0.4.3 also fixes the startup banner so it reads the package version instead of using
+a hard-coded old version string.
+
+
+# AcumenAI 2.0 — v0.4.3
 
 A lightweight, non-LLM agent that can run in two modes:
 
@@ -46,6 +69,20 @@ find the latest information about Raspberry Pi 5
 For arbitrary web questions, Acumen searches the web, opens a few result pages,
 extracts relevant sentences, and returns an evidence-based answer without an LLM.
 
+
+
+## v0.4.3 research fix
+
+The research engine now uses multiple retrieval paths instead of depending on one
+DuckDuckGo HTML page:
+
+- DuckDuckGo Instant Answer API
+- Wikipedia's MediaWiki API
+- DuckDuckGo HTML search as an additional source
+
+It also detects question type (`why`, `who`, `where`, `when`, `how`) and ranks
+sentences accordingly. A question such as `why is the sky blue?` now prioritizes
+causal/explanatory sentences instead of merely returning a source list.
 
 ## Source display mode
 

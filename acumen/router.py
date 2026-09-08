@@ -31,10 +31,13 @@ def route(text):
     if re.search(r"\b(solve|calculate|evaluate)\b", low) and re.search(r"[0-9=+\-*/^x]", low):
         return Route("math", raw)
 
+    if re.search(r"\bweather\b|\btemperature\b|\bforecast\b", low):
+        return Route("weather", raw, force_web=True)
+
     if re.search(r"\b(find|search|look up|lookup|research|browse|scrape)\b", low):
         return Route("research", raw, force_web=True)
 
-    if re.search(r"\b(flight|hotel|restaurant|price|weather|news|latest|current)\b", low):
+    if re.search(r"\b(flight|hotel|restaurant|price|news|latest|current)\b", low):
         return Route("research", raw, force_web=True)
 
     if re.match(r"^(who|what|where|when|why|how)\b", low):

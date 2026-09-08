@@ -3,6 +3,7 @@ from .research import WebResearcher
 from .homework import solve_math
 from .knowledge import KnowledgeStore
 from .sessions import SessionStore
+from .weather import weather_from_text
 
 class TaskProcessor:
     def __init__(self, root: Path, config):
@@ -43,6 +44,14 @@ class TaskProcessor:
                 )
                 return result
             task_type = "research"
+
+        if task_type == "weather":
+            result = weather_from_text(
+                query,
+                timeout=self.config["research"]["request_timeout"],
+            )
+            # Weather is volatile: return it, but do not learn it permanently.
+            return result
 
         if task_type == "homework":
             # Try symbolic math first, then research.

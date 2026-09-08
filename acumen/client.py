@@ -107,13 +107,13 @@ class AcumenClient:
                     "/knowledge\n"
                     "/delete <id>\n"
                     "/quit\n"
-                    "Or ask any web/homework/research question."
+                    "Or ask about weather, web research, homework, or other supported tasks."
                 )
             return "Unknown command. Type /help."
 
         if r.kind == "conversation":
             return (
-                "I can research things on the web, verify claims, solve supported math, "
+                "I can research the web, get live weather, verify claims, solve supported math, "
                 "and work on homework questions. Ask me what you want me to find or solve."
             )
 
