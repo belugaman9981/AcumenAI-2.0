@@ -1,113 +1,171 @@
-# AcumenAI 2.0 — v0.3.0
+# AcumenAI 2.0 — v0.4.0
 
-AcumenAI is a lightweight, non-LLM AI agent designed to run on a Raspberry Pi.
+A lightweight, non-LLM agent that can run in two modes:
 
-v0.3 adds a distributed verification system:
+- **Pi mode**: the Raspberry Pi is only the chat/answer node. Web work and all persistent storage live on your local computer.
+- **Local mode**: no Pi is required. The same agent, worker, storage, and web tools run directly on your computer.
 
-1. The Pi receives a claim.
-2. Acumen classifies and extracts the claim.
-3. The Pi places a verification job into the shared Acumen data folder.
-4. A Windows verifier worker checks the web.
-5. The worker writes a structured verification result back into the shared folder.
-6. The Pi imports only verified knowledge and answers the user.
+The core is not a wrapper around an LLM.
 
-No LLM, OpenAI API, Ollama, or llama.cpp is used.
+## What v0.4 changes
 
-## Architecture
+Acumen no longer needs one hard-coded rule for every task.
+
+It has a generic task router:
 
 ```text
-                 WINDOWS PC
-        ┌─────────────────────────┐
-        │ verifier_worker.py      │
-        │                         │
-        │ Wikipedia discovery     │
-        │ page scraping           │
-        │ infobox extraction      │
-        │ evidence scoring        │
-        └────────────┬────────────┘
-                     │
-              shared Acumen data
-                     │
-        verify_queue │ verify_results
-                     │
-        ┌────────────▼────────────┐
-        │ Raspberry Pi            │
-        │                         │
-        │ cognitive gate          │
-        │ claim parser            │
-        │ memory/knowledge graph  │
-        │ symbolic reasoner       │
-        │ response composer       │
-        └─────────────────────────┘
+user request
+   ↓
+intent router
+   ├─ greeting
+   ├─ calculator/math
+   ├─ homework
+   ├─ web research
+   ├─ factual verification
+   └─ stored-knowledge query
+   ↓
+local worker / local executor
+   ↓
+search + scrape + rank evidence
+   ↓
+structured answer
+   ↓
+Pi or local CLI displays answer
 ```
 
-Because your Windows Acumen folder is already mounted on the Pi as `/mnt/acumen`,
-the "transfer" happens through the shared folder. The verifier writes a result on
-Windows and the Pi immediately sees it.
+Examples:
 
-## Install on Windows
-
-Open PowerShell:
-
-```powershell
-cd "H:\Matthew\Matthew's Python Codes\python\AcumenAI-2.0"
-py -m venv .verifier-venv
-.\.verifier-venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python verifier_worker.py --root data
+```text
+find me flights from YVR to PEK
+research why the sky is blue
+who invented Python?
+help me with my homework: solve 2*x + 3 = 11
+find the latest information about Raspberry Pi 5
 ```
 
-Keep that window open while testing.
+For arbitrary web questions, Acumen searches the web, opens a few result pages,
+extracts relevant sentences, and returns an evidence-based answer without an LLM.
 
-## Run on the Pi
+## Temporary learning and save-on-exit
+
+During a session, useful results become **candidate learnings** on the local computer.
+
+They are *not* permanent yet.
+
+When a local session ends:
+
+```text
+Acumen learned 4 candidate items this session.
+[S]ave all  [R]eview one-by-one  [D]iscard
+```
+
+In Pi mode, the Pi sends a `finalize_session` task. The Windows worker then shows
+that prompt on the Windows computer.
+
+Permanent knowledge is stored locally in:
+
+```text
+data/knowledge.json
+```
+
+A browser-friendly export is generated at:
+
+```text
+data/knowledge.js
+```
+
+`knowledge.json` is the canonical file. `knowledge.js` is only an export.
+
+You can delete stored information at any time:
+
+```bash
+python manage_knowledge.py --root data
+```
+
+Do not commit your private `data/` folder to GitHub.
+
+## Pi mode
+
+The Pi should use your existing network-mounted project:
+
+```text
+/mnt/acumen
+```
+
+Pi:
 
 ```bash
 cd /mnt/acumen
 source ~/acumen-venv/bin/activate
-pip install -r requirements.txt
-cp config.example.yaml config.yaml
-python main.py
+pip install -r requirements-pi.txt
+python main.py --mode pi --root /mnt/acumen/data
 ```
 
-On the Pi, `config.yaml` should contain:
+Windows worker:
 
-```yaml
-storage:
-  root: /mnt/acumen/data
+```powershell
+cd "H:\Matthew\Matthew's Python Codes\python\AcumenAI-2.0"
+py -m venv .worker-venv
+.\.worker-venv\Scripts\Activate.ps1
+pip install -r requirements-local.txt
+python worker.py --root data
 ```
 
-## Example
+The Pi stores no permanent knowledge locally. Queue files and knowledge live on
+the Windows-backed share.
+
+## Local mode — no Pi
+
+Windows:
+
+```powershell
+cd "H:\Matthew\Matthew's Python Codes\python\AcumenAI-2.0"
+py -m venv .local-venv
+.\.local-venv\Scripts\Activate.ps1
+pip install -r requirements-local.txt
+python main.py --mode local --root data
+```
+
+Local mode executes web tasks directly and asks whether to save learning when you exit.
+
+## GitHub Pages UI
+
+`docs/` contains a static frontend suitable for GitHub Pages.
+
+Important limitation: **GitHub Pages is static hosting. It cannot run Acumen's Python
+worker, scrape websites, or safely store private user data.**
+
+The Pages UI connects to a bridge running on the user's own computer:
+
+```powershell
+python bridge.py --root data --port 8765
+```
+
+Then the static page talks to:
 
 ```text
-You: hello
-Acumen: Hi. What can I help you with?
-
-You: Ottawa is the capital of Canada.
-Acumen: I checked that. Ottawa is the capital of Canada.
-
-You: Ottowa is the capital of USA.
-Acumen: That claim does not match the source I checked. The capital of United States is Washington, D.C.
+http://127.0.0.1:8765
 ```
 
-## Verification status
+The bridge uses a local pairing token. This is pairing, not full GitHub OAuth.
 
-Facts have one of these states:
+A real "Sign in with GitHub" system requires an OAuth backend or device-flow
+implementation; a static GitHub Pages site alone should not contain OAuth secrets.
 
-- `verified`
-- `rejected`
-- `uncertain`
+## Homework
 
-Only `verified` facts are promoted into the trusted knowledge graph.
+Acumen uses two paths:
 
-## Commands
+- symbolic math/equations -> SymPy on the local computer
+- general homework/research -> web search + page scraping + evidence ranking
 
-```text
-/help
-/status
-/facts
-/memories
-/verify <claim>
-/why <question>
-/calc <expression>
-/quit
-```
+Because there is no LLM, free-form synthesis is intentionally extractive rather than
+pretending to generate knowledge it does not have.
+
+## Privacy design
+
+- Pi: no permanent knowledge
+- Local PC: all permanent knowledge
+- GitHub repo: code only
+- GitHub Pages: UI only
+- `data/`: ignored by Git
