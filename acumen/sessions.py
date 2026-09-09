@@ -1,5 +1,6 @@
 from pathlib import Path
 from .storage import atomic_write_json, read_json, utc_now, new_id
+from .knowledge import clean_candidate, candidate_fingerprint, merge_candidate
 
 class SessionStore:
     def __init__(self, root: Path):
@@ -27,6 +28,9 @@ class SessionStore:
         return read_json(self._path(session_id), None)
 
     def add_candidate(self, session_id, candidate):
+        candidate = clean_candidate(candidate)
+        if not candidate.get("answer"):
+            return
         data = self.get(session_id)
         if data is None:
             data = {
@@ -34,10 +38,14 @@ class SessionStore:
                 "created_at": utc_now(),
                 "candidates": [],
             }
-        # Avoid saving identical candidates repeatedly.
-        key = (candidate.get("query"), candidate.get("answer"))
-        for old in data["candidates"]:
-            if (old.get("query"), old.get("answer")) == key:
+        # Merge repeat learning without losing evidence from earlier sources.
+        key = candidate_fingerprint(candidate)
+        for index, old in enumerate(data["candidates"]):
+            if candidate_fingerprint(old) == key:
+                merged = merge_candidate(old, candidate)
+                if merged != old:
+                    data["candidates"][index] = merged
+                    self._write(session_id, data)
                 return
         data["candidates"].append(candidate)
         self._write(session_id, data)
@@ -62,10 +70,10 @@ class SessionStore:
 
         saved = 0
         if choice == "s":
-            for c in candidates:
-                knowledge_store.add(c)
-                saved += 1
+            knowledge_store.add_many(candidates)
+            saved = len(candidates)
         elif choice == "r":
+            selected = []
             for i, c in enumerate(candidates, 1):
                 print(f"\n[{i}/{len(candidates)}]")
                 print("Question:", c.get("query"))
@@ -77,8 +85,9 @@ class SessionStore:
                         print(" -", s.get("title") or s.get("url"), s.get("url", ""))
                 keep = input("Save this? [y/N]: ").strip().lower()
                 if keep == "y":
-                    knowledge_store.add(c)
-                    saved += 1
+                    selected.append(c)
+            knowledge_store.add_many(selected)
+            saved = len(selected)
 
         self.clear(session_id)
         print(f"Saved {saved} item(s). Discarded {len(candidates)-saved}.")

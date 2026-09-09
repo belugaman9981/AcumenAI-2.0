@@ -9,6 +9,10 @@ DEFAULTS = {
         "max_pages_to_scrape": 3,
         "request_timeout": 10,
         "max_page_chars": 120000,
+        "max_workers": 4,
+        "cache_ttl_seconds": 300,
+        "cache_max_entries": 128,
+        "max_page_bytes": 524288,
     },
     "tasks": {"wait_seconds": 45, "poll_interval": 0.25},
     "web": {

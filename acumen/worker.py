@@ -51,8 +51,7 @@ def main():
                             sessions.finalize_interactive(session_id, knowledge)
                         elif args.save_policy == "always":
                             data = sessions.get(session_id) or {"candidates":[]}
-                            for c in data["candidates"]:
-                                knowledge.add(c)
+                            knowledge.add_many(data["candidates"])
                             sessions.clear(session_id)
                         else:
                             sessions.clear(session_id)
@@ -79,3 +78,5 @@ def main():
             time.sleep(.35)
     except KeyboardInterrupt:
         print("\nWorker stopped.")
+    finally:
+        processor.close()

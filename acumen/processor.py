@@ -13,14 +13,20 @@ class TaskProcessor:
         self.sessions = SessionStore(root)
         self.researcher = WebResearcher(config["research"])
 
+    def close(self):
+        self.researcher.close()
+
     def _candidate(self, query, result, kind):
-        return {
+        candidate = {
             "query": query,
             "answer": result.get("answer", ""),
             "sources": result.get("sources", []),
             "confidence": result.get("confidence", .5),
             "kind": kind,
         }
+        if result.get("evidence"):
+            candidate["evidence"] = result["evidence"]
+        return candidate
 
     def process(self, task_type, payload, session_id):
         query = payload.get("query", "").strip()
@@ -32,6 +38,8 @@ class TaskProcessor:
                     "ok": True,
                     "answer": hits[0]["answer"],
                     "sources": hits[0].get("sources", []),
+                    "evidence": hits[0].get("evidence", []),
+                    "confidence": hits[0].get("confidence", .5),
                     "from_knowledge": True,
                 }
             task_type = "research"

@@ -126,6 +126,25 @@ Aliases `/hide-sources` and `/show-sources` also work.
 
 This only changes what Acumen prints. Source metadata is still retained with research results and candidate knowledge so it can be reviewed before saving.
 
+## Faster fetching and cleaner learning
+
+Research fetches independent search providers and pages concurrently, with a small
+worker limit. Wikipedia summaries are retrieved in a batch. Recently fetched
+results and pages can be reused from a bounded, temporary cache.
+
+Page downloads have a size limit, and extraction focuses on readable article
+content. Duplicate sources and sentences are filtered before building an answer.
+Research results retain the source for each selected sentence, and that evidence
+travels with candidate learnings into saved knowledge.
+
+Repeated learnings merge their source links instead of creating duplicate entries.
+Saving all items, or the items selected during review, writes knowledge in one
+batch. Learning still uses the existing save, review, or discard flow.
+
+Fetch limits and cache settings are available under `research` in
+`config.example.yaml`. Set `cache_ttl_seconds: 0` to disable caching, or reduce
+`max_workers` for a slower connection.
+
 ## Temporary learning and save-on-exit
 
 During a session, useful results become **candidate learnings** on the local computer.
