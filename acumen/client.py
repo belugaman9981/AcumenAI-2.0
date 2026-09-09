@@ -132,7 +132,10 @@ class AcumenClient:
 
     def close(self):
         if self.mode == "local":
-            self.session_store.finalize_interactive(self.session_id, self.knowledge)
+            try:
+                self.session_store.finalize_interactive(self.session_id, self.knowledge)
+            finally:
+                self.local_processor.close()
             return
 
         # Pi does not save knowledge. It only asks the local worker to finalize.

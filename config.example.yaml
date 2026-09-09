@@ -10,6 +10,13 @@ research:
   max_pages_to_scrape: 3
   request_timeout: 10
   max_page_chars: 120000
+  # Independent providers and pages may fetch concurrently.
+  max_workers: 4
+  # Keep a small, temporary cache; set TTL to 0 to disable it.
+  cache_ttl_seconds: 300
+  cache_max_entries: 128
+  # Stop reading large responses after this many decompressed bytes.
+  max_page_bytes: 524288
 
 tasks:
   wait_seconds: 45
