@@ -158,6 +158,18 @@ class KnowledgeStore:
     def all(self):
         return self._load()["items"]
 
+    def lookup(self, query):
+        """Only reuse an answer automatically for the same question."""
+        def key(text):
+            return " ".join(text.casefold().split()).rstrip(" ?!.")
+        wanted = key(query)
+        if not wanted:
+            return None
+        for item in reversed(self.all()):
+            if key(item.get("query", "")) == wanted and item.get("answer"):
+                return item
+        return None
+
     def add(self, candidate):
         return self.add_many([candidate])[0]
 

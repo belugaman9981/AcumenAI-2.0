@@ -1,56 +1,21 @@
+# AcumenAI 2.0 — v0.4.5
 
-## v0.4.4 location fix
+A lightweight, non-LLM agent that can run in Raspberry Pi answer-node mode or entirely on a local computer.
 
-The live-weather geocoder now understands province/state abbreviations and separates
-them from the city before querying Open-Meteo.
+## v0.4.5 — Codex edits merged
 
-Examples now supported:
+This build uses the Codex-edited v0.4.4 working tree as the new base. It keeps the weather, research, source-display, session-learning, and local/Pi modes, and adds the newer relevance/time fixes.
 
-```text
-Vancouver BC
-Vancouver, BC
-Toronto ON
-Calgary AB
-Seattle WA
-New York NY
-```
+Changes carried forward from the Codex edits:
 
-For `Vancouver BC`, Acumen searches the geocoder for `Vancouver` and then ranks the
-results using the `British Columbia` + `Canada` hints instead of sending the literal
-string `Vancouver BC` as the city name.
+- dedicated current-time intent and timezone service
+- current-time results are always fresh and are never permanently learned
+- exact-question knowledge reuse instead of loose word-overlap reuse
+- stricter research relevance scoring
+- sources/evidence are retained for the sentences actually used
+- `tzdata` added for reliable Windows timezone support
 
-
-
-## v0.4.4 live weather fix
-
-Weather is no longer treated as a generic web-research question.
-
-Requests such as:
-
-```text
-what is the weather in Vancouver BC
-weather in Toronto
-temperature in Seattle
-forecast for London
-```
-
-are routed to a dedicated live weather provider on the local computer. The Pi still
-only receives and displays the answer.
-
-Weather is deliberately **not** stored as learned permanent knowledge because it becomes stale.
-
-v0.4.4 also fixes the startup banner so it reads the package version instead of using
-a hard-coded old version string.
-
-
-# AcumenAI 2.0 — v0.4.4
-
-A lightweight, non-LLM agent that can run in two modes:
-
-- **Pi mode**: the Raspberry Pi is only the chat/answer node. Web work and all persistent storage live on your local computer.
-- **Local mode**: no Pi is required. The same agent, worker, storage, and web tools run directly on your computer.
-
-The core is not a wrapper around an LLM.
+This release package intentionally excludes `.git/`, `config.yaml`, `data/`, backups, virtual environments, and Python caches. Keep your existing local `data/` directory when upgrading.
 
 ## What v0.4 changes
 
@@ -93,7 +58,7 @@ extracts relevant sentences, and returns an evidence-based answer without an LLM
 
 
 
-## v0.4.4 research fix
+## v0.4.x research fix
 
 The research engine now uses multiple retrieval paths instead of depending on one
 DuckDuckGo HTML page:
@@ -105,6 +70,29 @@ DuckDuckGo HTML page:
 It also detects question type (`why`, `who`, `where`, `when`, `how`) and ranks
 sentences accordingly. A question such as `why is the sky blue?` now prioritizes
 causal/explanatory sentences instead of merely returning a source list.
+
+## Current time and answer relevance
+
+Clock questions use a dedicated timezone lookup:
+
+```text
+what is the time in shenzhen right now?
+what time is it in Vancouver BC?
+current time in New York
+```
+
+Acumen resolves the location using Open-Meteo, then converts the worker computer's
+current UTC clock using IANA timezone rules, including daylight-saving changes.
+Only the location mapping is cached; every answer reads the clock again. Current
+time answers bypass saved knowledge and are never saved as permanent learning.
+Unresolved locations produce a clear failure instead of unrelated web articles.
+
+Install the updated `requirements-local.txt` on the worker (including `tzdata`
+for Windows), and keep its system clock synchronized.
+
+Automatic knowledge reuse now requires the same question, rather than accepting
+a different question that shares common words. Research rejects weak topic matches
+and retains source links for the sentences it actually uses.
 
 ## Source display mode
 

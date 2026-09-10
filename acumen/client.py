@@ -107,24 +107,24 @@ class AcumenClient:
                     "/knowledge\n"
                     "/delete <id>\n"
                     "/quit\n"
-                    "Or ask about weather, web research, homework, or other supported tasks."
+                    "Or ask about the time in a city, weather, web research, or homework."
                 )
             return "Unknown command. Type /help."
 
         if r.kind == "conversation":
             return (
-                "I can research the web, get live weather, verify claims, solve supported math, "
+                "I can look up the time in a city, research the web, get live weather, verify claims, solve supported math, "
                 "and work on homework questions. Ask me what you want me to find or solve."
             )
 
         task_type = r.kind
         # Non-forced factual questions can reuse local knowledge first.
         if r.kind == "research" and not r.force_web:
-            hits = self.knowledge.search(r.query)
-            if hits and hits[0]["score"] >= .65:
+            hit = self.knowledge.lookup(r.query)
+            if hit:
                 return self._format({
-                    "answer": hits[0]["answer"],
-                    "sources": hits[0].get("sources", []),
+                    "answer": hit["answer"],
+                    "sources": hit.get("sources", []),
                 })
 
         result = self._execute(task_type, r.query)
