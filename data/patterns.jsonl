@@ -1,2 +1,0 @@
-{"id": "979bd346-362d-4fba-b730-89a580e62ad9", "input_pattern": "hello", "intent": "statement", "success": true, "created_at": "2026-09-08T00:44:54.886072+00:00"}
-{"id": "796001ec-e39b-4dc5-a373-5f226e8d0677", "input_pattern": "ottowa is the capital of usa", "intent": "statement", "success": true, "created_at": "2026-09-08T00:45:51.821500+00:00"}
