@@ -1,0 +1,10 @@
+.venv/
+.worker-venv/
+.local-venv/
+__pycache__/
+*.pyc
+config.yaml
+data/
+.DS_Store
+data-data-backup/
+*.zip
