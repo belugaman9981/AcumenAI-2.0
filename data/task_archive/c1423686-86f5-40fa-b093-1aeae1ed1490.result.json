@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "answer": "Vancouver, BC - 7 Day Forecast - Environment Canada Skip to main content Skip to \"About government\" Edit My Profile My Weather Profile Weather shortcuts Vancouver, BC Please note that the browser or operating system used on your device is no longer supported. Vancouver, BC Current Weather - The Weather Network Hourly weather forecast in Vancouver , British Columbia, Canada. Check current conditions in Vancouver , British Columbia, Canada with radar, hourly, and more.",
+  "sources": [
+    {
+      "title": "Vancouver, BC Current Weather - The Weather Network",
+      "url": "https://www.theweathernetwork.com/en/city/ca/british-columbia/vancouver/current"
+    },
+    {
+      "title": "Vancouver, BC - 7 Day Forecast - Environment Canada",
+      "url": "https://weather.gc.ca/en/location/index.html?coords=49.245,-123.115"
+    },
+    {
+      "title": "Vancouver, British Columbia, Canada Hourly Weather | AccuWeather",
+      "url": "https://www.accuweather.com/en/ca/vancouver/v6c/hourly-weather-forecast/53286"
+    }
+  ],
+  "confidence": 0.81,
+  "task_id": "c1423686-86f5-40fa-b093-1aeae1ed1490"
+}

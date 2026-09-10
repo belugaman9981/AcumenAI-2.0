@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "answer": "China Southern Airlines Flight 3456 was a scheduled domestic passenger flight from Chongqing Jiangbei International Airport to Shenzhen Huangtian Airport (now Shenzhen Bao'an International Airport). Shenzhen is a prefecture-level city in Guangdong, China. With a population of 17.5 million in 2020, Shenzhen is the third-most-populous city by urban population in China after Shanghai and Beijing.",
+  "sources": [
+    {
+      "title": "Shenzhen",
+      "url": "https://en.wikipedia.org/wiki/Shenzhen",
+      "provider": "Wikipedia"
+    },
+    {
+      "title": "China Southern Airlines Flight 3456",
+      "url": "https://en.wikipedia.org/wiki/China_Southern_Airlines_Flight_3456",
+      "provider": "Wikipedia"
+    },
+    {
+      "title": "Shenzhen Satellite TV",
+      "url": "https://en.wikipedia.org/wiki/Shenzhen_Satellite_TV",
+      "provider": "Wikipedia"
+    }
+  ],
+  "confidence": 0.86,
+  "task_id": "d430a26f-f451-4e70-aeec-f054ef7a769e"
+}

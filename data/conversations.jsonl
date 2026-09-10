@@ -1,0 +1,4 @@
+{"id": "b5e1e69a-b563-49f1-8d5a-b697c7216aae", "role": "user", "text": "hello", "created_at": "2026-09-08T00:44:54.844962+00:00", "metadata": {}}
+{"id": "e9a1072e-609c-451a-8493-5050396335cd", "role": "assistant", "text": "I stored the statement, but I couldn't extract a structured fact from it.", "created_at": "2026-09-08T00:44:54.926868+00:00", "metadata": {"intent": "statement"}}
+{"id": "92e3b503-b650-4c7d-b470-ff471ec5c10a", "role": "user", "text": "ottowa is the capital of usa", "created_at": "2026-09-08T00:45:51.773752+00:00", "metadata": {}}
+{"id": "d80c7d26-f299-4e1c-834e-fc2feee947ac", "role": "assistant", "text": "Learned: ottowa --capital_of--> usa", "created_at": "2026-09-08T00:45:51.906877+00:00", "metadata": {"intent": "statement"}}

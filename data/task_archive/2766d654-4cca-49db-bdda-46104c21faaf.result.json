@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "answer": "Vancouver, BC - 7 Day Forecast - Environment Canada Skip to main content Skip to \"About government\" Edit My Profile My Weather Profile Weather shortcuts Vancouver, BC Please note that the browser or operating system used on your device is no longer supported. Vancouver is 47 m above sea level and located at 49.24° N 123.00° W . This is a classic Vancouver September—glorious when the sun’s out, but always ready to change its mind.",
+  "sources": [
+    {
+      "title": "Vancouver, BC - 7 Day Forecast - Environment Canada",
+      "url": "https://weather.gc.ca/en/location/index.html?coords=49.245,-123.115",
+      "provider": "DuckDuckGo"
+    },
+    {
+      "title": "Vancouver, BC Current Weather - The Weather Network",
+      "url": "https://www.theweathernetwork.com/en/city/ca/british-columbia/vancouver/current",
+      "provider": "DuckDuckGo"
+    },
+    {
+      "title": "Vancouver Weather Forecast",
+      "url": "https://www.weather-forecast.com/locations/Vancouver/forecasts/latest",
+      "provider": "DuckDuckGo"
+    }
+  ],
+  "confidence": 0.86,
+  "task_id": "2766d654-4cca-49db-bdda-46104c21faaf"
+}

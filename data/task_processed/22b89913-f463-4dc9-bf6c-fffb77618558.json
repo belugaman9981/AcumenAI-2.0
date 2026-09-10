@@ -1,0 +1,9 @@
+{
+  "task_id": "22b89913-f463-4dc9-bf6c-fffb77618558",
+  "task_type": "weather",
+  "payload": {
+    "query": "what is the weather in Vancouver BC"
+  },
+  "session_id": "36248bc4-24e0-4b41-821b-46257c5ac4ce",
+  "created_at": "2026-09-08T23:32:42.527937+00:00"
+}

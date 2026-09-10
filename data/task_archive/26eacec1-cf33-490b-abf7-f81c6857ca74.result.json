@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "answer": "$353 CHEAP FLIGHTS from Vancouver to Hong Kong (YVR - HKG) | KAYAK Book on Priceline and fly from Vancouver to Hong Kong on Philippine from $343, on MU from $448, on China from $458. Bundle flight + hotel and save an average of $240 per person. Cheap Flights: Book & Compare Airline Tickets & Airfare | Skyscanner",
+  "sources": [
+    {
+      "title": "$343 Flight Deals from Vancouver to Hong Kong - Priceline.com",
+      "url": "https://www.priceline.com/flight-routes/en-us/YVR/HKG/flights-from-vancouver-to-hong-kong.ssp"
+    },
+    {
+      "title": "Cheap Flights: Book & Compare Airline Tickets & Airfare | Skyscanner",
+      "url": "https://www.skyscanner.ca/"
+    },
+    {
+      "title": "$353 CHEAP FLIGHTS from Vancouver to Hong Kong (YVR - KAYAK",
+      "url": "https://www.kayak.com/flight-routes/Vancouver-Intl-YVR/Hong-Kong-Intl-HKG"
+    }
+  ],
+  "confidence": 0.81,
+  "task_id": "26eacec1-cf33-490b-abf7-f81c6857ca74"
+}

@@ -1,0 +1,9 @@
+{
+  "task_id": "aa81b991-e5fb-4e95-87de-511adfa9441c",
+  "task_type": "finalize_session",
+  "payload": {
+    "query": ""
+  },
+  "session_id": "bafb5983-82b5-4772-95bb-a1427369747a",
+  "created_at": "2026-09-08T23:29:41.264050+00:00"
+}
