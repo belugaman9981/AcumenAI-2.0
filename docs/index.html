@@ -27,18 +27,27 @@
       <button id="helpBtn" type="button">Help</button>
       <button id="exportChat" type="button" disabled>Export chat</button>
       <button id="clearChat" type="button" disabled>Clear view</button>
+      <label class="inline">Theme
+        <select id="theme" aria-label="Color theme">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
       <label class="inline"><input id="showSources" type="checkbox" checked> Show sources</label>
     </div>
     <section id="chat" role="log" aria-label="Conversation" aria-live="polite">
       <p id="emptyChat" class="hint">Start with a question above, or write your own below.</p>
     </section>
 
+    <label class="recent-label" for="recentQuestions">Recent questions</label>
+    <select id="recentQuestions" disabled><option value="">Your questions will appear here</option></select>
     <form id="form">
       <label class="sr-only" for="message">Your message</label>
       <textarea id="message" rows="3" autocomplete="off" placeholder="Ask Acumen a question…" required></textarea>
       <button id="sendBtn">Send</button>
     </form>
-    <p class="hint">Enter to send · Shift+Enter for a new line. Chat stays in this tab unless you export it.</p>
+    <p class="hint">Enter to send · Shift+Enter for a new line · ↑ in an empty box recalls your last question. Unsent drafts recover after a refresh in this tab; export chat to keep your answers.</p>
 
     <details id="learningPanel">
       <summary>New learning <span id="learningCount">(0)</span></summary>

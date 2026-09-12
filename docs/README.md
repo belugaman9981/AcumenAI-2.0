@@ -21,6 +21,13 @@ the session. Expand **Saved knowledge** to refresh, filter, or delete saved item
 Chat text stays in tab memory unless you export it; pairing settings are saved in
 the browser. Tabs paired to one bridge share its learning session.
 
+Small conveniences: choose System, Light, or Dark from the theme menu; unsent
+drafts recover after a refresh in the same tab. Drafts are kept separately for each
+bridge URL. Recent questions lists the last ten distinct questions in this page;
+select one to edit it, or press Up in an empty message box to recall the latest.
+**Ask again** repeats a question using normal answer and freshness rules while
+preserving your current draft. Clearing the chat view also clears recent questions.
+
 Run the regression suite with `python -B -m pytest -q`. The optional browser test
 in `tests/test_browser_usability.py` uses Playwright and an installed Chrome browser.
 It starts temporary local servers and uses a separate temporary knowledge store.

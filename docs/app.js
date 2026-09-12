@@ -1,6 +1,48 @@
 const $ = (selector) => document.querySelector(selector);
 const chat = $("#chat"), statusBox = $("#status"), settings = $("#settings");
 let busy = false, transcript = [], savedKnowledge = [], pendingCount = 0, sourcesShown = true;
+let recentQuestions = [];
+
+function draftKey() { return `acumen_draft:${cfg().url}`; }
+function saveDraft() {
+  try {
+    const value = $("#message").value;
+    if (value) sessionStorage.setItem(draftKey(), value);
+    else sessionStorage.removeItem(draftKey());
+  } catch { /* Chat remains usable when browser storage is unavailable. */ }
+}
+function restoreDraft() {
+  try { $("#message").value = sessionStorage.getItem(draftKey()) || ""; }
+  catch { $("#message").value = ""; }
+}
+function fillDraft(value) {
+  $("#message").value = value;
+  saveDraft();
+  $("#message").focus();
+}
+function renderRecent() {
+  const select = $("#recentQuestions");
+  select.replaceChildren(new Option(recentQuestions.length ? "Choose a question to edit or send again…" : "Your questions will appear here", ""));
+  recentQuestions.forEach((question, index) => select.add(new Option(question, String(index))));
+  select.disabled = !recentQuestions.length;
+}
+function applyTheme(value) {
+  const theme = ["light", "dark"].includes(value) ? value : "system";
+  document.documentElement.dataset.theme = theme;
+  $("#theme").value = theme;
+}
+try { applyTheme(localStorage.getItem("acumen_theme")); } catch { applyTheme("system"); }
+$("#theme").onchange = () => {
+  applyTheme($("#theme").value);
+  try { localStorage.setItem("acumen_theme", $("#theme").value); } catch { /* Apply for this page only. */ }
+};
+$("#recentQuestions").onchange = () => {
+  const index = $("#recentQuestions").value;
+  if (index !== "") fillDraft(recentQuestions[Number(index)]);
+  $("#recentQuestions").value = "";
+};
+$("#message").addEventListener("input", saveDraft);
+restoreDraft();
 
 function cfg() {
   return {url: localStorage.getItem("acumen_bridge") || "http://127.0.0.1:8765", token: localStorage.getItem("acumen_token") || ""};
@@ -14,9 +56,9 @@ function setBusy(value) {
   $("#clearChat").disabled = value || !transcript.length;
   $("#exportChat").disabled = !transcript.length;
   $("#saveLearning").disabled = $("#discardLearning").disabled = value || !pendingCount;
-  document.querySelectorAll(".retry, .delete-knowledge").forEach(button => { button.disabled = value; });
+  document.querySelectorAll(".retry, .repeat, .delete-knowledge").forEach(button => { button.disabled = value; });
 }
-function add(role, text, retryQuestion = null) {
+function add(role, text, retryQuestion = null, failed = false) {
   $("#emptyChat")?.remove();
   const message = document.createElement("article");
   message.className = `msg ${role}`;
@@ -36,8 +78,8 @@ function add(role, text, retryQuestion = null) {
   }
   if (retryQuestion) {
     const retry = document.createElement("button");
-    retry.className = "retry";
-    retry.textContent = "Try again";
+    retry.className = failed ? "retry" : "repeat";
+    retry.textContent = failed ? "Try again" : "Ask again";
     retry.onclick = () => send(retryQuestion);
     message.append(retry);
   }
@@ -97,14 +139,18 @@ async function check() {
 }
 async function send(text) {
   if (busy || !text.trim()) return;
+  if (!text.startsWith("/")) {
+    recentQuestions = [text, ...recentQuestions.filter(question => question !== text)].slice(0, 10);
+    renderRecent();
+  }
   setBusy(true);
   add("user", text);
   try {
     const result = await api("/api/chat", {method: "POST", body: JSON.stringify({message: text})});
-    add("acumen", result.reply || "No reply received.");
+    add("acumen", result.reply || "No reply received.", text.startsWith("/") ? null : text);
     try { await refreshSession(); statusBox.textContent = "Connected and paired with local Acumen"; }
     catch (error) { statusBox.textContent = error.message; }
-  } catch (error) { add("acumen", error.message, text); statusBox.textContent = error.message; }
+  } catch (error) { add("acumen", error.message, text, true); statusBox.textContent = error.message; }
   finally { setBusy(false); $("#message").focus(); }
 }
 $("#form").addEventListener("submit", (event) => {
@@ -113,13 +159,18 @@ $("#form").addEventListener("submit", (event) => {
   const input = $("#message"), text = input.value.trim();
   if (!text) return;
   input.value = "";
+  saveDraft();
   send(text);
 });
 $("#message").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); $("#form").requestSubmit(); }
+  if (event.key === "ArrowUp" && !event.isComposing && !$("#message").value && recentQuestions.length) {
+    event.preventDefault();
+    fillDraft(recentQuestions[0]);
+  }
 });
 document.querySelectorAll("[data-prompt]").forEach(button => {
-  button.onclick = () => { $("#message").value = button.dataset.prompt; $("#message").focus(); };
+  button.onclick = () => fillDraft(button.dataset.prompt);
 });
 $("#helpBtn").onclick = () => send("/help");
 $("#showSources").onchange = async () => {
@@ -144,7 +195,14 @@ $("#exportChat").onclick = () => {
 $("#clearChat").onclick = () => {
   if (busy || !confirm("Clear the chat display? Export first if you want a copy. Saved and pending learning will stay.")) return;
   transcript = [];
+  recentQuestions = [];
+  renderRecent();
   chat.replaceChildren();
+  const empty = document.createElement("p");
+  empty.id = "emptyChat";
+  empty.className = "hint";
+  empty.textContent = "Start with a question above, or write your own below.";
+  chat.append(empty);
   setBusy(false);
   $("#message").focus();
 };
@@ -160,6 +218,7 @@ $("#saveSettings").onclick = (event) => {
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error();
     localStorage.setItem("acumen_bridge", url.href.replace(/\/+$/, ""));
     localStorage.setItem("acumen_token", $("#token").value);
+    restoreDraft();
     savedKnowledge = [];
     renderKnowledge();
     check();

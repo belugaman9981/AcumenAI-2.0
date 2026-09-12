@@ -1,6 +1,8 @@
 :root { font-family: system-ui, sans-serif; color-scheme: light dark; --line: #8886; --accent: #4d6bda; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
-body { margin: 0; line-height: 1.5; }
+body { margin: 0; line-height: 1.5; background: Canvas; color: CanvasText; }
 main { max-width: 900px; margin: 0 auto; padding: 24px; }
 header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 header h1 { margin-bottom: 0; letter-spacing: -.04em; }
@@ -15,12 +17,16 @@ header p { margin-top: 4px; opacity: .7; }
 .user { margin-left: 12%; background: #4d6bda12; }
 .acumen { margin-right: 8%; }
 form#form { display: flex; gap: 10px; align-items: stretch; }
-input, textarea { width: 100%; padding: 12px; font: inherit; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; }
+input, textarea, select { width: 100%; padding: 12px; font: inherit; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; }
+select option { background: Canvas; color: CanvasText; }
+.inline select { width: auto; padding: 6px; }
+.recent-label { font-size: .875rem; margin-bottom: 6px; }
+#recentQuestions { margin-bottom: 12px; text-overflow: ellipsis; }
 textarea { resize: vertical; min-height: 76px; max-height: 300px; }
 button { padding: 10px 14px; cursor: pointer; border: 1px solid var(--line); border-radius: 10px; font: inherit; color: inherit; background: transparent; }
 button:hover:not(:disabled) { background: #4d6bda18; }
 button:disabled { opacity: .45; cursor: default; }
-button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 #sendBtn, #saveLearning { background: var(--accent); color: white; }
 .inline { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .inline input { width: auto; }

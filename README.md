@@ -101,6 +101,11 @@ copy buttons, chat export, and retry buttons for failed requests. Enter sends;
 Shift+Enter adds a line. You can draft the next question while Acumen works.
 The connection indicator checks your pairing token as well as the bridge.
 
+Choose a System, Light, or Dark theme. Unsent drafts recover after refreshing the
+same tab. The recent-question menu keeps ten distinct questions for quick editing;
+Up in an empty message box recalls the last one. **Ask again** repeats a question
+without replacing a new draft you are typing.
+
 Open **New learning** to review candidate answers and their sources, then use
 **Save all** or **Discard all** without ending the session. **Saved knowledge**
 can be filtered by question or answer. **Clear view** clears the visible chat;
