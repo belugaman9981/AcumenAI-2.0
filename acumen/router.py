@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from .time_intent import is_time_request
 
 @dataclass
 class Route:
@@ -10,6 +11,12 @@ class Route:
 GREETINGS = {"hello", "hi", "hey", "yo", "hiya"}
 THANKS = {"thanks", "thank you", "thx"}
 FAREWELLS = {"bye", "goodbye", "later", "cya"}
+
+def requires_fresh_data(text):
+    return is_time_request(text) or bool(re.search(
+        r"\b(now|today|tonight|tomorrow|currently|current|latest|live|news|"
+        r"weather|temperature|forecast|prices?|flights?|hotels?)\b", text, re.I,
+    ))
 
 def route(text):
     raw = " ".join(text.strip().split())
@@ -25,6 +32,9 @@ def route(text):
     if raw.startswith("/"):
         return Route("command", raw)
 
+    if is_time_request(raw):
+        return Route("time", raw, force_web=True)
+
     if re.search(r"\b(homework|worksheet|assignment)\b", low):
         return Route("homework", raw, force_web=True)
 
@@ -37,7 +47,7 @@ def route(text):
     if re.search(r"\b(find|search|look up|lookup|research|browse|scrape)\b", low):
         return Route("research", raw, force_web=True)
 
-    if re.search(r"\b(flight|hotel|restaurant|price|news|latest|current)\b", low):
+    if requires_fresh_data(raw) or re.search(r"\brestaurant\b", low):
         return Route("research", raw, force_web=True)
 
     if re.match(r"^(who|what|where|when|why|how)\b", low):

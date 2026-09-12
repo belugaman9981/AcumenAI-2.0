@@ -8,6 +8,7 @@ import threading
 import time
 import requests
 from bs4 import BeautifulSoup
+from .time_intent import is_time_request
 
 UA = "Mozilla/5.0 (compatible; AcumenAI/0.4.2; local research agent)"
 
@@ -398,8 +399,18 @@ class WebResearcher:
         return "what"
 
     def rank_sentences(self, query, page_text, limit=3):
+        if is_time_request(query):
+            return []
         terms = self._terms(query)
         qtype = self._question_type(query)
+        creation_terms = {"invented", "created", "developed", "founded"}
+        asks_creator = qtype == "who" and bool(terms & creation_terms)
+        if asks_creator:
+            terms -= creation_terms
+        if qtype == "how":
+            terms -= {"work", "works"}
+        if not terms:
+            return []
         ranked = []
 
         intent_markers = {
@@ -415,10 +426,20 @@ class WebResearcher:
             low = sentence.lower()
             sentence_terms = set(re.findall(r"[a-z0-9'-]+", low))
             hits = len(terms & sentence_terms)
-            if not hits and terms:
+            coverage = hits / len(terms)
+            # One place/name match is not enough to answer a multi-part question.
+            if coverage < .6:
+                continue
+            if asks_creator and not (sentence_terms & creation_terms):
+                continue
+            if qtype == "why" and not re.search(
+                r"\b(because|due to|causes?|caused|causing|results? from|results? in|"
+                r"reason|leads? to|therefore|as a result|makes?|scatters?|scattering)\b",
+                low,
+            ):
                 continue
 
-            score = hits / max(1, len(terms))
+            score = coverage
             if any(marker in low for marker in intent_markers[qtype]):
                 score += 0.24
             if index < 3:
@@ -453,6 +474,12 @@ class WebResearcher:
 
     def research(self, query):
         normalized_query = _normalize_query(query)
+        if is_time_request(normalized_query):
+            return {
+                "ok": False, "learnable": False,
+                "answer": "A current clock reading is needed for that question; web articles cannot provide it.",
+                "sources": [], "evidence": [], "confidence": 0.0,
+            }
         search_results = self.search(normalized_query)
         evidence = []
         selected = search_results[:max(0, int(self.config["max_pages_to_scrape"]))]
@@ -517,10 +544,12 @@ class WebResearcher:
             return {
                 "ok": False,
                 "answer": (
-                    "I searched the web, but I couldn't extract enough readable "
-                    "information to answer that."
+                    "I found no evidence that directly answers your question. "
+                    "Try a more specific question or source."
                 ),
-                "sources": search_results[:5],
+                "sources": [],
+                "searched_sources": search_results[:5],
+                "learnable": False,
                 "confidence": 0.2,
             }
 
