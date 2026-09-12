@@ -135,6 +135,30 @@ Fetch limits and cache settings are available under `research` in
 
 ## Temporary learning and save-on-exit
 
+### Learning and processing improvements
+
+Stable questions can reuse a supported answer from the current session before it
+is saved. Saved and pending answers are checked together: when versions differ,
+Acumen researches again instead of choosing whichever was saved last. This is a
+conservative text comparison, not a semantic contradiction detector; differently
+worded answers can also trigger research. Use `/knowledge` and `/delete <id>` to
+review and remove outdated saved versions.
+
+Question matching understands contractions (including curly apostrophes) while
+preserving names, numbers, negation, word order, and symbols such as `C++`.
+Explicit search requests still fetch again. Short topics, explanation requests,
+and yes/no questions are routed to research, and repeated answers record usage
+without increasing their confidence.
+
+Automatic learning requires a successful answer, a source URL, and a confidence
+score of at least 0.6. These scores are heuristics, not calibrated probabilities.
+Snippet-only answers can be displayed but do not become learning candidates;
+each selected passage needs page support. Matching passages from multiple sources
+retain their provenance without repeating the sentence in the answer. Live-data
+queries use the same freshness rules for retrieval, caching, and learning.
+
+The save, review, or discard choice below still controls permanent learning.
+
 During a session, useful results become **candidate learnings** on the local computer.
 
 They are *not* permanent yet.

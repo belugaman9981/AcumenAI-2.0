@@ -9,6 +9,8 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from .time_intent import is_time_request
+from .router import requires_fresh_data
+from .text import expand_contractions, tokens
 
 UA = "Mozilla/5.0 (compatible; AcumenAI/0.4.2; local research agent)"
 
@@ -19,6 +21,7 @@ ACTION_PREFIXES = [
     r"^\s*look\s+up\s+",
     r"^\s*lookup\s+",
     r"^\s*help\s+me\s+with\s+my\s+homework\s*:\s*",
+    r"^\s*(?:tell\s+me\s+about|explain|describe|what\s+about|info\s+on|information\s+on)\s+",
 ]
 
 def _clean(text):
@@ -36,6 +39,7 @@ def _unwrap_ddg(url):
 
 def _normalize_query(query):
     q = _clean(query)
+    q = re.sub(r"^(?:please\s+|(?:can|could|would) you\s+(?:please\s+)?)", "", q, flags=re.I)
     for pattern in ACTION_PREFIXES:
         q2 = re.sub(pattern, "", q, flags=re.I)
         if q2 != q:
@@ -52,11 +56,7 @@ def _url_key(url):
                        urlencode(query), ""))
 
 def _volatile_query(query):
-    return bool(re.search(
-        r"\b(latest|current|currently|today|tonight|tomorrow|now|live|news|weather|"
-        r"forecast|prices?|flights?|stocks?|scores?|this\s+(?:week|month|year))\b",
-        query, re.I,
-    ))
+    return requires_fresh_data(query)
 
 class WebResearcher:
     def __init__(self, config):
@@ -376,16 +376,15 @@ class WebResearcher:
             "the","a","an","is","are","was","were","to","of","for","and","or",
             "in","on","at","me","my","find","search","look","up","research","please",
             "what","who","where","when","why","how","do","does","did","tell","about",
-            "information","info","explain"
+            "information","info","explain","describe","could","would","you"
         }
         return {
-            x for x in re.findall(r"[a-z0-9'-]+", query.lower())
-            if len(x) > 2 and x not in stop
+            x for x in tokens(expand_contractions(query)) if x not in stop
         }
 
     @staticmethod
     def _question_type(query):
-        q = _normalize_query(query).lower()
+        q = expand_contractions(_normalize_query(query))
         if q.startswith("why ") or " why " in q:
             return "why"
         if q.startswith("who "):
@@ -401,7 +400,7 @@ class WebResearcher:
     def rank_sentences(self, query, page_text, limit=3):
         if is_time_request(query):
             return []
-        terms = self._terms(query)
+        terms = self._terms(_normalize_query(query))
         qtype = self._question_type(query)
         creation_terms = {"invented", "created", "developed", "founded"}
         asks_creator = qtype == "who" and bool(terms & creation_terms)
@@ -411,6 +410,7 @@ class WebResearcher:
             terms -= {"work", "works"}
         if not terms:
             return []
+        anchors = {term for term in terms if any(c.isdigit() for c in term) or len(term) <= 2}
         ranked = []
 
         intent_markers = {
@@ -424,11 +424,14 @@ class WebResearcher:
 
         for index, sentence in enumerate(self._sentences(page_text)):
             low = sentence.lower()
-            sentence_terms = set(re.findall(r"[a-z0-9'-]+", low))
+            sentence_terms = set(tokens(expand_contractions(sentence)))
             hits = len(terms & sentence_terms)
             coverage = hits / len(terms)
             # One place/name match is not enough to answer a multi-part question.
             if coverage < .6:
+                continue
+            # Version numbers and short names (AI, UK, C) must not disappear.
+            if not anchors <= sentence_terms:
                 continue
             if asks_creator and not (sentence_terms & creation_terms):
                 continue
@@ -490,6 +493,7 @@ class WebResearcher:
         for result, page_text in zip(selected, page_texts):
             page_text = page_text or ""
             ranked = self.rank_sentences(normalized_query, page_text, limit=3)
+            evidence_kind = "page"
 
             if not ranked and result.get("snippet"):
                 ranked = self.rank_sentences(
@@ -499,6 +503,7 @@ class WebResearcher:
                 )
                 # Snippets may be truncated or out of context: keep confidence modest.
                 ranked = [dict(sentence, score=min(.35, sentence["score"])) for sentence in ranked]
+                evidence_kind = "snippet"
 
             if ranked:
                 evidence.append({
@@ -506,6 +511,7 @@ class WebResearcher:
                     "url": result["url"],
                     "provider": result.get("provider", ""),
                     "sentences": ranked,
+                    "kind": evidence_kind,
                 })
 
         candidates = []
@@ -523,13 +529,15 @@ class WebResearcher:
         seen = set()
         for score, sentence, source in candidates:
             normalized = re.sub(r"\W+", " ", sentence.lower()).strip()
-            if normalized in seen:
+            if normalized not in seen and len(answer_sentences) >= 3:
                 continue
-            seen.add(normalized)
-            answer_sentences.append(sentence)
+            if normalized not in seen:
+                seen.add(normalized)
+                answer_sentences.append(sentence)
             answer_evidence.append({
                 "text": sentence, "url": source["url"], "title": source["title"],
                 "score": round(score, 3),
+                "kind": source["kind"],
             })
             if source["url"] not in source_urls:
                 source_urls.add(source["url"])
@@ -537,8 +545,6 @@ class WebResearcher:
                     "title": source["title"], "url": source["url"],
                     "provider": source.get("provider", ""),
                 })
-            if len(answer_sentences) >= 3:
-                break
 
         if not answer_sentences:
             return {
@@ -553,13 +559,20 @@ class WebResearcher:
                 "confidence": 0.2,
             }
 
+        # Every selected passage needs page support before it can be learned.
+        supported = {
+            re.sub(r"\W+", " ", item["text"].lower()).strip()
+            for item in answer_evidence if item["kind"] == "page"
+        }
+        learnable = seen <= supported and not _volatile_query(normalized_query)
         return {
             "ok": True,
             "answer": " ".join(answer_sentences),
             "sources": answer_sources,
             "evidence": answer_evidence,
+            "learnable": learnable,
             "confidence": min(
-                .9,
+                .9 if seen <= supported else .49,
                 .4 + .1 * len({urlsplit(source["url"]).netloc for source in answer_sources})
                 + .2 * min(1, max(item["score"] for item in answer_evidence)),
             ),

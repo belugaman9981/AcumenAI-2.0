@@ -24,6 +24,21 @@ class MemoryStore:
     def all(self):
         return self.store.read_all()
 
+    def touch(self, memory_ids=None):
+        """Increment use_count for the given memories (or all if none given)."""
+        ids = set(memory_ids) if memory_ids else None
+        items = self.all()
+        changed = 0
+        for item in items:
+            if ids is not None and item.get("id") not in ids:
+                continue
+            item["use_count"] = int(item.get("use_count", 0) or 0) + 1
+            item["last_used_at"] = utc_now()
+            changed += 1
+        if changed:
+            self.store.write_all(items)
+        return changed
+
     def search(self, query, limit=8, min_score=0.05):
         scored = []
         for m in self.all():

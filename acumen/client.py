@@ -118,14 +118,9 @@ class AcumenClient:
             )
 
         task_type = r.kind
-        # Non-forced factual questions can reuse local knowledge first.
+        # The worker considers both saved and pending answers, including conflicts.
         if r.kind == "research" and not r.force_web:
-            hit = self.knowledge.lookup(r.query)
-            if hit:
-                return self._format({
-                    "answer": hit["answer"],
-                    "sources": hit.get("sources", []),
-                })
+            task_type = "knowledge_query"
 
         result = self._execute(task_type, r.query)
         return self._format(result)

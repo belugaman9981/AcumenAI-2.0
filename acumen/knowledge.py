@@ -2,9 +2,10 @@ from copy import deepcopy
 import json
 import math
 from pathlib import Path
-import re
 
 from .storage import atomic_write_json, read_json, utc_now, new_id
+from .text import normalize_question, similarity
+from .router import requires_fresh_data
 
 
 def _text(value):
@@ -118,7 +119,7 @@ def candidate_fingerprint(candidate):
     query = _text(candidate.get("query", ""))
     answer = _text(candidate.get("answer", ""))
     if kind != "math":
-        query = query.casefold()
+        query = normalize_question(query)
         answer = answer.casefold()
     return kind, query, answer
 
@@ -129,13 +130,36 @@ def merge_candidate(existing, incoming):
     incoming = clean_candidate(incoming)
     merged["sources"] = _merge_sources(merged["sources"], incoming["sources"])
     merged["confidence"] = max(merged["confidence"], incoming["confidence"])
+    if not incoming.get("learnable", True):
+        merged["learnable"] = False
     if "evidence" in merged or "evidence" in incoming:
         merged["evidence"] = _merge_evidence(merged.get("evidence"), incoming.get("evidence"))
     return merged
 
 
-def _terms(text):
-    return set(re.findall(r"[a-z0-9'-]+", text.lower()))
+def matching_answers(items, query):
+    """Keep math case-sensitive and never match merely overlapping topics."""
+    wanted = normalize_question(query)
+    if not wanted or requires_fresh_data(query):
+        return []
+    return [item for item in items if item.get("answer") and (
+        _text(item.get("query")) == _text(query) if item.get("kind") == "math"
+        else normalize_question(item.get("query", "")) == wanted
+    )]
+
+
+def select_answer(items, query):
+    """Abstain when stored versions disagree; usage is not proof of truth."""
+    matches = matching_answers(items, query)
+    answers = {
+        _text(item["answer"]) if item.get("kind") == "math"
+        else _text(item["answer"]).casefold() for item in matches
+    }
+    if len(answers) != 1:
+        return None
+    eligible = [item for item in matches if item.get("learnable", True)
+                and _confidence(item.get("confidence", .5)) >= .5]
+    return max(eligible, key=lambda item: _confidence(item.get("confidence", .5)), default=None)
 
 
 class KnowledgeStore:
@@ -159,16 +183,21 @@ class KnowledgeStore:
         return self._load()["items"]
 
     def lookup(self, query):
-        """Only reuse an answer automatically for the same question."""
-        def key(text):
-            return " ".join(text.casefold().split()).rstrip(" ?!.")
-        wanted = key(query)
-        if not wanted:
-            return None
-        for item in reversed(self.all()):
-            if key(item.get("query", "")) == wanted and item.get("answer"):
-                return item
-        return None
+        """Reuse an unambiguous answer to the same normalized question."""
+        return select_answer(self.all(), query)
+
+    def record_use(self, item_id):
+        """Track actual retrieval without inflating confidence."""
+        if not item_id:
+            return False
+        data = self._load()
+        for item in data["items"]:
+            if item.get("id") == item_id:
+                item["use_count"] = int(item.get("use_count", 0) or 0) + 1
+                item["last_used_at"] = utc_now()
+                self._save(data)
+                return True
+        return False
 
     def add(self, candidate):
         return self.add_many([candidate])[0]
@@ -200,11 +229,14 @@ class KnowledgeStore:
                     "sources": candidate["sources"],
                     "kind": candidate["kind"],
                     "confidence": candidate["confidence"],
+                    "use_count": 0,
                     "created_at": now,
                     "updated_at": now,
                 }
                 if "evidence" in candidate:
                     item["evidence"] = candidate["evidence"]
+                if "learnable" in candidate:
+                    item["learnable"] = candidate["learnable"]
                 items.append(item)
                 by_fingerprint[fingerprint] = item
             saved.append(item)
@@ -221,12 +253,11 @@ class KnowledgeStore:
         return True
 
     def search(self, query, limit=5):
-        q = _terms(query)
+        """Rank stored items by blended query similarity, best first."""
         matches = []
         for item in self.all():
-            hay = _terms(item.get("query", "") + " " + item.get("answer", ""))
-            score = len(q & hay) / max(1, len(q)) if q and hay else 0
-            if score:
+            score = similarity(query, item.get("query", ""))
+            if score >= .2:
                 matches.append((score, item))
         matches.sort(key=lambda match: match[0], reverse=True)
         return [dict(item, score=round(score, 3)) for score, item in matches[:limit]]

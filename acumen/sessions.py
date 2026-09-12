@@ -29,7 +29,7 @@ class SessionStore:
 
     def add_candidate(self, session_id, candidate):
         candidate = clean_candidate(candidate)
-        if not candidate.get("answer"):
+        if not candidate.get("query") or not candidate.get("answer") or not candidate.get("learnable", True):
             return
         data = self.get(session_id)
         if data is None:
