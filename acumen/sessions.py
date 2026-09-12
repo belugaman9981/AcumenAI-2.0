@@ -55,6 +55,21 @@ class SessionStore:
         if p.exists():
             p.unlink()
 
+    def resolve_pending(self, session_id, action, knowledge_store):
+        """Save or discard current candidates while keeping the session open."""
+        if action not in {"save", "discard"}:
+            raise ValueError("Choose save or discard.")
+        data = self.get(session_id)
+        candidates = (data or {}).get("candidates", [])
+        if not candidates:
+            return 0
+        if action == "save":
+            knowledge_store.add_many(candidates)
+        # Keep candidates available for retry if saving raises an error.
+        data["candidates"] = []
+        self._write(session_id, data)
+        return len(candidates)
+
     def finalize_interactive(self, session_id, knowledge_store):
         data = self.get(session_id)
         if not data or not data.get("candidates"):

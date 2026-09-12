@@ -11,22 +11,50 @@
     <header>
       <div>
         <h1>AcumenAI</h1>
-        <p>Local agent UI</p>
+        <p>Ask, discover, and keep what you learn.</p>
       </div>
       <button id="settingsBtn">Pair</button>
     </header>
 
-    <section id="status">Not connected</section>
-    <section id="chat"></section>
+    <section id="status" role="status">Checking connection…</section>
+    <section class="starters" aria-label="Try a question">
+      <button type="button" data-prompt="Explain why the sky is blue">Explain something</button>
+      <button type="button" data-prompt="What time is it in Vancouver?">Check the time</button>
+      <button type="button" data-prompt="What is the weather in Paris?">Check the weather</button>
+      <button type="button" data-prompt="Solve 2*x + 3 = 11">Solve an equation</button>
+    </section>
+    <div class="toolbar">
+      <button id="helpBtn" type="button">Help</button>
+      <button id="exportChat" type="button" disabled>Export chat</button>
+      <button id="clearChat" type="button" disabled>Clear view</button>
+      <label class="inline"><input id="showSources" type="checkbox" checked> Show sources</label>
+    </div>
+    <section id="chat" role="log" aria-label="Conversation" aria-live="polite">
+      <p id="emptyChat" class="hint">Start with a question above, or write your own below.</p>
+    </section>
 
     <form id="form">
-      <input id="message" autocomplete="off" placeholder="Ask Acumen anything…">
-      <button>Send</button>
+      <label class="sr-only" for="message">Your message</label>
+      <textarea id="message" rows="3" autocomplete="off" placeholder="Ask Acumen a question…" required></textarea>
+      <button id="sendBtn">Send</button>
     </form>
+    <p class="hint">Enter to send · Shift+Enter for a new line. Chat stays in this tab unless you export it.</p>
+
+    <details id="learningPanel">
+      <summary>New learning <span id="learningCount">(0)</span></summary>
+      <p class="hint">Review these answers, then save or discard them. Saving keeps them on your local computer.</p>
+      <div id="learning">Connect to review new learning.</div>
+      <div class="toolbar">
+        <button id="saveLearning" type="button" disabled>Save all</button>
+        <button id="discardLearning" type="button" disabled>Discard all</button>
+      </div>
+    </details>
 
     <details>
       <summary>Saved knowledge</summary>
       <button id="refreshKnowledge" type="button">Refresh</button>
+      <label for="knowledgeSearch">Search questions and answers</label>
+      <input id="knowledgeSearch" type="search" placeholder="Filter saved knowledge…">
       <div id="knowledge"></div>
     </details>
   </main>
@@ -42,7 +70,9 @@
         Pairing token
         <input id="token" type="password">
       </label>
-      <button id="saveSettings" value="default">Save</button>
+      <p class="hint">Use the pairing token from your local config.yaml.</p>
+      <button id="saveSettings" value="default">Save and connect</button>
+      <button value="cancel">Cancel</button>
     </form>
   </dialog>
 

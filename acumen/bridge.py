@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+from threading import RLock
 from flask import Flask, request, jsonify
 from .config import load_config
 from .client import AcumenClient
@@ -11,6 +12,8 @@ def make_app(root: Path, cfg):
     knowledge = KnowledgeStore(root)
     token = cfg["web"]["pairing_token"]
     allowed = set(cfg["web"].get("allowed_origins", []))
+    lock = RLock()
+    app.extensions["acumen_client"] = client
 
     @app.after_request
     def cors(resp):
@@ -36,19 +39,39 @@ def make_app(root: Path, cfg):
 
     @app.post("/api/chat")
     def chat():
-        data = request.get_json(silent=True) or {}
-        text = str(data.get("message", "")).strip()
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or not isinstance(data.get("message"), str):
+            return jsonify({"error": "message must be text"}), 400
+        text = data["message"].strip()
         if not text:
             return jsonify({"error": "message required"}), 400
-        return jsonify({"reply": client.chat(text)})
+        with lock:
+            return jsonify({"reply": client.chat(text)})
+
+    @app.get("/api/session")
+    def session_status():
+        with lock:
+            data = client.session_store.get(client.session_id) or {}
+            return jsonify({"candidates": data.get("candidates", []), "show_sources": client.show_sources})
+
+    @app.post("/api/session/learning")
+    def resolve_learning():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or not isinstance(data.get("action"), str) or data["action"] not in {"save", "discard"}:
+            return jsonify({"error": "Choose save or discard."}), 400
+        with lock:
+            return jsonify(client._execute("session_learning", data["action"]))
 
     @app.get("/api/knowledge")
     def list_knowledge():
-        return jsonify({"items": knowledge.all()})
+        with lock:
+            return jsonify({"items": knowledge.all()})
 
     @app.delete("/api/knowledge/<item_id>")
     def delete_knowledge(item_id):
-        return jsonify({"deleted": knowledge.delete(item_id)})
+        with lock:
+            deleted = knowledge.delete(item_id)
+            return jsonify({"deleted": deleted}), 200 if deleted else 404
 
     return app
 

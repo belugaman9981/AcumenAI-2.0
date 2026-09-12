@@ -94,6 +94,35 @@ Automatic knowledge reuse now requires the same question, rather than accepting
 a different question that shares common words. Research rejects weak topic matches
 and retains source links for the sentences it actually uses.
 
+## Everyday controls
+
+The browser UI includes starter questions, a multiline composer, a source toggle,
+copy buttons, chat export, and retry buttons for failed requests. Enter sends;
+Shift+Enter adds a line. You can draft the next question while Acumen works.
+The connection indicator checks your pairing token as well as the bridge.
+
+Open **New learning** to review candidate answers and their sources, then use
+**Save all** or **Discard all** without ending the session. **Saved knowledge**
+can be filtered by question or answer. **Clear view** clears the visible chat;
+saved and pending learning stay available. The transcript is held in tab memory
+and can be downloaded as a text file with **Export chat**.
+
+These commands also work in chat and the command line:
+
+| Command | Action |
+| --- | --- |
+| `/examples` | Show starter questions |
+| `/history` | Show the last 30 questions and answers in this session |
+| `/again` | Ask the last question again, using normal freshness rules |
+| `/sources` | Show sources for the last answer |
+| `/knowledge [search words]` | Browse or search saved questions |
+| `/learning` | Review pending learning |
+| `/save` | Save all pending learning and keep chatting |
+| `/discard` | Discard pending learning; keep previously saved knowledge |
+
+In Pi mode, save and discard actions run on the local worker. Browser tabs
+connected to the same bridge share its learning session and source preference.
+
 ## Source display mode
 
 Sources are shown by default.

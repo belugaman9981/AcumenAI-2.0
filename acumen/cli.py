@@ -23,7 +23,8 @@ def main():
         print("Pi is answer-only; persistent learning lives on the local computer.")
     else:
         print("Running entirely on this local computer.")
-    print("Type /help for commands.")
+    print("Type /examples for ideas or /help for commands.")
+    print("Use /learning to review new answers and /save to keep them without exiting.")
 
     try:
         while True:

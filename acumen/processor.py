@@ -53,6 +53,13 @@ class TaskProcessor:
     def process(self, task_type, payload, session_id):
         query = payload.get("query", "").strip()
 
+        if task_type == "session_learning":
+            if query not in {"save", "discard"}:
+                return {"ok": False, "answer": "Choose /save or /discard."}
+            count = self.sessions.resolve_pending(session_id, query, self.knowledge)
+            verb = "Saved" if query == "save" else "Discarded"
+            return {"ok": True, "answer": f"{verb} {count} learning item(s).", "count": count}
+
         # Also handle queued research jobs from clients with older routing code.
         if task_type == "time" or (
             task_type in {"research", "knowledge_query"} and is_time_request(query)
