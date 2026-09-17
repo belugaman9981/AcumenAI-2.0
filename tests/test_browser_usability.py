@@ -14,7 +14,8 @@ from acumen.bridge import make_app
 from acumen.config import DEFAULTS
 
 
-def test_browser_chat_and_learning(tmp_path):
+@pytest.mark.parametrize("same_origin", [False, True], ids=["static-frontend", "localhost-website"])
+def test_browser_chat_and_learning(tmp_path, same_origin):
     playwright = pytest.importorskip("playwright.sync_api")
     project = Path(__file__).resolve().parents[1]
     static = ThreadingHTTPServer(("127.0.0.1", 0), partial(SimpleHTTPRequestHandler, directory=str(project / "docs")))
@@ -25,6 +26,9 @@ def test_browser_chat_and_learning(tmp_path):
     app = make_app(tmp_path / "data", config)
     backend = make_server("127.0.0.1", 0, app, threaded=True)
     bridge_url = f"http://127.0.0.1:{backend.server_port}"
+    if same_origin:
+        # Use localhost and an arbitrary port, with no stored bridge URL.
+        origin = f"http://localhost:{backend.server_port}"
     threads = [Thread(target=server.serve_forever, daemon=True) for server in (static, backend)]
     for thread in threads:
         thread.start()
@@ -39,10 +43,12 @@ def test_browser_chat_and_learning(tmp_path):
             page = context.new_page()
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
-            page.add_init_script(f"localStorage.setItem('acumen_bridge', {json.dumps(bridge_url)});")
+            if not same_origin:
+                page.add_init_script(f"localStorage.setItem('acumen_bridge', {json.dumps(bridge_url)});")
             page.goto(origin)
             playwright.expect(page.locator("#status")).to_contain_text("Pairing token not accepted")
             page.locator("#settingsBtn").click()
+            playwright.expect(page.locator("#bridgeUrl")).to_have_value(origin if same_origin else bridge_url)
             page.locator("#token").fill("browser-test-token")
             page.locator("#saveSettings").click()
             playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")

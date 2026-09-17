@@ -45,7 +45,11 @@ $("#message").addEventListener("input", saveDraft);
 restoreDraft();
 
 function cfg() {
-  return {url: localStorage.getItem("acumen_bridge") || "http://127.0.0.1:8765", token: localStorage.getItem("acumen_token") || ""};
+  const localPage = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+  const defaults = {url: localPage ? location.origin : "http://127.0.0.1:8765", token: ""};
+  try {
+    return {url: localStorage.getItem("acumen_bridge") || defaults.url, token: localStorage.getItem("acumen_token") || ""};
+  } catch { return defaults; }
 }
 function setBusy(value) {
   busy = value;

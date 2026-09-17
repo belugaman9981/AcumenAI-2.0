@@ -2,6 +2,87 @@
 
 A lightweight, non-LLM agent that can run in Raspberry Pi answer-node mode or entirely on a local computer.
 
+## Run as a localhost website
+
+The Python bridge now serves **both the website and the API**. You only need one
+server; no GitHub Pages setup, Node.js, separate static server, or Pi is required.
+Use Python 3.10 or newer. Internet access is needed to install dependencies and
+for web research, weather, and location lookups; local calculations work offline.
+
+### Windows PowerShell
+
+Open PowerShell in this project folder and run:
+
+```powershell
+py -m venv .local-venv
+.\.local-venv\Scripts\python.exe -m pip install -r requirements-local.txt
+.\.local-venv\Scripts\python.exe bridge.py
+```
+
+These commands do not require activating the environment or changing PowerShell's
+execution policy. If `.local-venv` already exists, skip the first command.
+
+### macOS or Linux
+
+From the project folder:
+
+```bash
+python3 -m venv .local-venv
+.local-venv/bin/python -m pip install -r requirements-local.txt
+.local-venv/bin/python bridge.py
+```
+
+### Open and pair
+
+1. Keep the terminal running and open **http://localhost:8765** in your browser
+   (http://127.0.0.1:8765 also works with the default configuration).
+2. Click **Pair**, paste the **Pairing token** printed in the terminal, then click
+   **Save and connect**. The bridge URL automatically matches the localhost page,
+   including a custom port. Wait for **Connected and paired with local Acumen**.
+3. Try `calculate 6*7` or `Solve 2*x + 3 = 11`.
+4. Use **New learning → Save all** to keep candidate answers before stopping.
+   Stop the server with **Ctrl+C** in the terminal. Closing the browser tab does
+   not stop the server or save pending learning automatically.
+
+No `config.yaml` is required. If `web.pairing_token` is missing, empty, or still
+`change-me`, the server generates a random token for that run. Pair again after
+restarting it. To keep the same token between runs, copy `config.example.yaml` to
+`config.yaml` **only if you do not already have one**, then set
+`web.pairing_token` to your own long, private random value. Existing custom tokens
+continue to work. Pairing settings are remembered by your browser.
+
+For later launches on Windows, run just:
+
+```powershell
+.\.local-venv\Scripts\python.exe bridge.py
+```
+
+To use another port or knowledge directory:
+
+```powershell
+.\.local-venv\Scripts\python.exe bridge.py --port 8888 --root data
+```
+
+Then open **http://localhost:8888**. `--config path/to/config.yaml` selects another
+configuration file. Without `--root`, the server uses `storage.root` from the
+configuration, falling back to `data`. Relative paths are resolved from the
+terminal's current directory. Existing saved knowledge is reused.
+
+### Troubleshooting
+
+- **Port already in use:** stop the other Acumen server or choose `--port 8888`.
+- **Pairing token not accepted:** copy the token from the current server terminal
+  into **Pair**. Generated tokens change whenever the server restarts.
+- **Could not reach Acumen:** keep the terminal open, use the URL printed there,
+  and check the bridge URL in **Pair**, especially if you previously changed it.
+- **Missing Python module:** install `requirements-local.txt` with the same
+  environment's Python that you use to run `bridge.py`.
+
+The default server listens only on this computer (`127.0.0.1`). This launcher is
+for local use, not public internet hosting. The website serves only its HTML,
+JavaScript, and CSS; private data and configuration files are not served as files.
+Chat and knowledge APIs still require pairing.
+
 ## v0.4.5 — Codex edits merged
 
 This build uses the Codex-edited v0.4.4 working tree as the new base. It keeps the weather, research, source-display, session-learning, and local/Pi modes, and adds the newer relevance/time fixes.
@@ -273,9 +354,11 @@ python main.py --mode local --root data
 
 Local mode executes web tasks directly and asks whether to save learning when you exit.
 
-## GitHub Pages UI
+## Optional GitHub Pages UI
 
-`docs/` contains a static frontend suitable for GitHub Pages.
+`docs/` contains the same frontend served by the localhost website. It can also be
+published separately through GitHub Pages. For everyday local use, follow
+**Run as a localhost website** above.
 
 Important limitation: **GitHub Pages is static hosting. It cannot run Acumen's Python
 worker, scrape websites, or safely store private user data.**
@@ -291,6 +374,13 @@ Then the static page talks to:
 ```text
 http://127.0.0.1:8765
 ```
+
+Add your exact Pages origin (for example, `https://your-name.github.io`, without
+a repository path) to `web.allowed_origins` in `config.yaml`, restart the bridge,
+then use **Pair** on the Pages site with the token printed in the terminal.
+Browser local-network permissions or HTTPS-to-HTTP restrictions may block a
+hosted page from reaching localhost; the directly served localhost website avoids
+that separate-origin setup.
 
 The bridge uses a local pairing token. This is pairing, not full GitHub OAuth.
 
@@ -314,3 +404,18 @@ pretending to generate knowledge it does not have.
 - GitHub repo: code only
 - GitHub Pages: UI only
 - `data/`: ignored by Git
+
+## Tests
+
+From the project folder, using the environment created above on Windows:
+
+```powershell
+.\.local-venv\Scripts\python.exe -m pip install pytest playwright
+.\.local-venv\Scripts\python.exe -B -m pytest -q
+```
+
+On macOS/Linux, replace `.\.local-venv\Scripts\python.exe` with
+`.local-venv/bin/python`. The browser tests require an installed Google Chrome
+browser and otherwise skip. They exercise both the localhost website and the
+separately hosted frontend with temporary test data, including pairing, chat,
+learning, export, retry, and mobile layout.

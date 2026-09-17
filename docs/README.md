@@ -1,4 +1,23 @@
-# GitHub Pages
+# AcumenAI browser interface
+
+## Localhost (recommended)
+
+From the project root, install `requirements-local.txt` in a Python virtual
+environment and run `python bridge.py` using that environment. Open
+**http://localhost:8765**, click **Pair**, and paste the pairing token printed in
+the terminal. The bridge serves this folder's interface and the API together;
+do not open `index.html` directly or start a separate static server.
+
+Use `python bridge.py --port 8888` for **http://localhost:8888**. The local page
+automatically uses its own host and port unless you have saved another bridge URL
+in **Pair**. The [main README](../README.md#run-as-a-localhost-website) contains
+complete Windows, macOS, and Linux setup commands and troubleshooting.
+
+If no custom pairing token is configured, a new one is generated for each server
+run. Pair again after restarting. Save pending learning before stopping the
+server with Ctrl+C; closing the tab does not save it automatically.
+
+## Optional GitHub Pages
 
 Publish this `docs/` folder with GitHub Pages.
 
@@ -10,7 +29,11 @@ Run the local bridge on the user's computer:
 python bridge.py --root data --port 8765
 ```
 
-Then use the Pair button in the page and enter the local pairing token from `config.yaml`.
+Add the exact Pages origin (such as `https://your-name.github.io`) to
+`web.allowed_origins` in `config.yaml` and restart the bridge. Then use the Pair
+button in the page and enter the local pairing token printed in the terminal.
+Your browser may require local-network permission or block access from a hosted
+HTTPS page to an HTTP bridge. Use the localhost website if that connection fails.
 
 Choose a starter question or type a message. Enter sends and Shift+Enter inserts a
 new line. You can copy answers, export the displayed conversation, toggle sources,
