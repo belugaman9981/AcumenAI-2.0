@@ -1,4 +1,5 @@
 from copy import deepcopy
+from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 from .storage import atomic_write_json, read_json, utc_now, new_id
 from .text import normalize_question, similarity
 from .router import requires_fresh_data
+from .config import normalize_recheck_after_days
 
 
 def _text(value):
@@ -18,6 +20,43 @@ def _confidence(value):
     except (TypeError, ValueError, OverflowError):
         return 0.5
     return max(0.0, min(1.0, number)) if math.isfinite(number) else 0.5
+
+
+def _parse_timestamp(value):
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except (ValueError, TypeError, OverflowError):
+            return None
+    if not isinstance(value, datetime):
+        return None
+    try:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _research_timestamp_value(item):
+    # An invalid explicit research date must not fall through to a newer save date.
+    for field in ("researched_at", "updated_at", "created_at"):
+        if field in item:
+            return item[field]
+    return None
+
+
+def _is_recent(item, max_age_days, now):
+    if item.get("kind") in {"math", "homework"} and any(
+        (source.get("url") if isinstance(source, dict) else source) == "local://sympy"
+        for source in item.get("sources", []) or []
+    ):
+        return True
+    researched = _parse_timestamp(_research_timestamp_value(item))
+    if researched is None or now is None:
+        return False
+    age_seconds = (now - researched).total_seconds()
+    return -300 <= age_seconds <= max_age_days * 86400
 
 
 def _merge_sources(*groups):
@@ -134,6 +173,17 @@ def merge_candidate(existing, incoming):
         merged["learnable"] = False
     if "evidence" in merged or "evidence" in incoming:
         merged["evidence"] = _merge_evidence(merged.get("evidence"), incoming.get("evidence"))
+    # Preserve the research age when saving, merging snapshots, or adding sources.
+    # Only a valid newer research date can refresh it.
+    existing_stamp = _research_timestamp_value(existing)
+    merged["researched_at"] = existing_stamp
+    previous = _parse_timestamp(existing_stamp)
+    incoming_stamp = incoming.get("researched_at")
+    researched = _parse_timestamp(incoming_stamp)
+    now = _parse_timestamp(utc_now())
+    if researched is not None and (researched - now).total_seconds() <= 300:
+        if previous is None or (previous - now).total_seconds() > 300 or researched > previous:
+            merged["researched_at"] = incoming_stamp
     return merged
 
 
@@ -148,8 +198,8 @@ def matching_answers(items, query):
     )]
 
 
-def select_answer(items, query):
-    """Abstain when stored versions disagree; usage is not proof of truth."""
+def select_answer(items, query, *, max_age_days=30, now=None):
+    """Reuse recent, unambiguous answers; usage is not proof of truth."""
     matches = matching_answers(items, query)
     answers = {
         _text(item["answer"]) if item.get("kind") == "math"
@@ -157,8 +207,11 @@ def select_answer(items, query):
     }
     if len(answers) != 1:
         return None
+    max_age_days = normalize_recheck_after_days(max_age_days)
+    checked_at = _parse_timestamp(utc_now() if now is None else now)
     eligible = [item for item in matches if item.get("learnable", True)
-                and _confidence(item.get("confidence", .5)) >= .5]
+                and _confidence(item.get("confidence", .5)) >= .5
+                and _is_recent(item, max_age_days, checked_at)]
     return max(eligible, key=lambda item: _confidence(item.get("confidence", .5)), default=None)
 
 
@@ -182,9 +235,9 @@ class KnowledgeStore:
     def all(self):
         return self._load()["items"]
 
-    def lookup(self, query):
-        """Reuse an unambiguous answer to the same normalized question."""
-        return select_answer(self.all(), query)
+    def lookup(self, query, *, max_age_days=30, now=None):
+        """Reuse a recent, unambiguous answer to the same normalized question."""
+        return select_answer(self.all(), query, max_age_days=max_age_days, now=now)
 
     def record_use(self, item_id):
         """Track actual retrieval without inflating confidence."""
@@ -232,6 +285,9 @@ class KnowledgeStore:
                     "use_count": 0,
                     "created_at": now,
                     "updated_at": now,
+                    "researched_at": _research_timestamp_value(candidate)
+                    if any(field in candidate for field in ("researched_at", "updated_at", "created_at"))
+                    else now,
                 }
                 if "evidence" in candidate:
                     item["evidence"] = candidate["evidence"]

@@ -265,6 +265,28 @@ async function refreshSession() {
     question.textContent = item.query;
     answer.textContent = item.answer;
     row.append(question, answer);
+    if (item.learning_review) {
+      const review = item.learning_review, summary = document.createElement("div");
+      summary.className = "learning-summary";
+      const label = document.createElement("strong"), detail = document.createElement("p"), support = document.createElement("p");
+      label.className = review.status === "conflict" ? "learning-conflict" : "learning-label";
+      label.textContent = review.label;
+      detail.textContent = review.detail;
+      support.textContent = review.reason;
+      summary.append(label, detail, support);
+      if (review.other_answers?.length) {
+        const comparison = document.createElement("details"), heading = document.createElement("summary");
+        heading.textContent = "Compare other answers";
+        comparison.append(heading);
+        for (const text of review.other_answers) {
+          const previous = document.createElement("p");
+          previous.textContent = text;
+          comparison.append(previous);
+        }
+        summary.append(comparison);
+      }
+      row.append(summary);
+    }
     for (const source of item.sources || []) {
       try {
         const url = new URL(source.url);

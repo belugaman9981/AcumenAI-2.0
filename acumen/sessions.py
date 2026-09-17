@@ -5,6 +5,14 @@ from .storage import atomic_write_json, read_json, utc_now, new_id
 from .knowledge import clean_candidate, candidate_fingerprint, merge_candidate
 
 
+DECLINED_LEARNING_LIMIT = 256
+
+
+def _fingerprint_digest(fingerprint):
+    serialized = json.dumps(fingerprint, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
 def candidate_review_id(candidate):
     """Identify the exact pending revision, including its evidence and metadata."""
     serialized = json.dumps(candidate, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
@@ -34,7 +42,7 @@ class SessionStore:
         return self.dir / f"{session_id}.json"
 
     def _write(self, session_id, data):
-        data["updated_at"] = utc_now()
+        data = dict(data, updated_at=utc_now())
         atomic_write_json(self._path(session_id), data)
 
     def get(self, session_id):
@@ -53,15 +61,17 @@ class SessionStore:
             }
         # Merge repeat learning without losing evidence from earlier sources.
         key = candidate_fingerprint(candidate)
+        if _fingerprint_digest(key) in data.get("declined_fingerprints", []):
+            return
         for index, old in enumerate(data["candidates"]):
             if candidate_fingerprint(old) == key:
                 merged = merge_candidate(old, candidate)
                 if merged != old:
-                    data["candidates"][index] = merged
-                    self._write(session_id, data)
+                    candidates = list(data["candidates"])
+                    candidates[index] = merged
+                    self._write(session_id, dict(data, candidates=candidates))
                 return
-        data["candidates"].append(candidate)
-        self._write(session_id, data)
+        self._write(session_id, dict(data, candidates=data["candidates"] + [candidate]))
 
     def clear(self, session_id):
         p = self._path(session_id)
@@ -90,10 +100,20 @@ class SessionStore:
         if action == "save":
             knowledge_store.add_many(selected)
         # Keep candidates available for retry if saving raises an error.
-        data["candidates"] = [] if item_id is None else [
+        remaining = [] if item_id is None else [
             candidate for index, candidate in enumerate(candidates) if index != selected_index
         ]
-        self._write(session_id, data)
+        updated = dict(data, candidates=remaining)
+        if action == "discard":
+            # Remember review decisions only for this session, without retaining
+            # discarded answers. Alternative answers to the question stay eligible.
+            declined = dict.fromkeys(data.get("declined_fingerprints", []))
+            for candidate in selected:
+                digest = _fingerprint_digest(candidate_fingerprint(candidate))
+                declined.pop(digest, None)
+                declined[digest] = None
+            updated["declined_fingerprints"] = list(declined)[-DECLINED_LEARNING_LIMIT:]
+        self._write(session_id, updated)
         return len(selected)
 
     def finalize_interactive(self, session_id, knowledge_store):

@@ -10,6 +10,7 @@ from .config import load_config
 from .client import AcumenClient
 from .knowledge import KnowledgeStore
 from .sessions import candidate_review_id, PendingLearningChanged
+from .learning_review import describe_learning
 
 def make_app(root: Path, cfg):
     app = Flask(__name__, static_folder=None)
@@ -108,8 +109,12 @@ def make_app(root: Path, cfg):
     def session_status():
         with lock:
             data = client.session_store.get(client.session_id) or {}
-            candidates = [dict(candidate, review_id=candidate_review_id(candidate))
-                          for candidate in data.get("candidates", [])]
+            pending = data.get("candidates", [])
+            saved = knowledge.all()
+            candidates = [dict(candidate, review_id=candidate_review_id(candidate),
+                               learning_review=describe_learning(candidate, saved, pending,
+                                   max_age_days=client.local_processor._recheck_days()))
+                          for candidate in pending]
             return jsonify({"candidates": candidates, "show_sources": client.show_sources})
 
     @app.post("/api/session/learning")

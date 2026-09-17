@@ -65,7 +65,7 @@ def test_sentence_evidence_survives_learning_and_save(tmp_path):
     sid = processor.sessions.create()
     evidence = [{
         "text": "Air scatters blue light.",
-        "url": "https://example.org/sky", "title": "Sky", "score": .8,
+        "url": "https://example.org/sky", "title": "Sky", "score": .8, "kind": "page",
     }]
     result = {
         "ok": True, "answer": "Air scatters blue light.", "confidence": .7,

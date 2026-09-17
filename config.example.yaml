@@ -22,6 +22,10 @@ tasks:
   wait_seconds: 45
   poll_interval: 0.25
 
+learning:
+  # Research answers older than this are checked again before automatic reuse.
+  recheck_after_days: 30
+
 web:
   bridge_host: 127.0.0.1
   bridge_port: 8765

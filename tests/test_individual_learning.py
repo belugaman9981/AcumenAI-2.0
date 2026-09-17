@@ -55,6 +55,7 @@ def test_review_ids_are_stable_and_do_not_change_stored_candidates(bridge):
     assert len({item["review_id"] for item in exposed}) == len(stored)
     for item, original in zip(exposed, stored):
         assert item.pop("review_id") == candidate_review_id(original)
+        assert item.pop("learning_review")["label"]
         assert item == original
         assert "review_id" not in original
     assert session_path.read_bytes() == before

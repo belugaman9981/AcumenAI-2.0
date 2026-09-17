@@ -21,6 +21,7 @@ def supported(answer="Ottawa is the capital of Canada.", **extra):
     return {
         "ok": True, "answer": answer, "confidence": .7,
         "sources": [{"title": "Canada", "url": "https://example.org/canada"}],
+        "evidence": [{"text": answer, "url": "https://example.org/canada", "kind": "page"}],
         **extra,
     }
 

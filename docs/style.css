@@ -105,6 +105,11 @@ label { display: grid; gap: 5px; }
 .knowledge-item:last-child { border-bottom: 0; }
 .knowledge-item a { color: var(--accent); }
 .knowledge-item button { font-size: 12px; }
+.learning-summary { font-size: 12px; padding: 12px; margin: 12px 0; border-radius: 10px; background: var(--soft); }
+.learning-summary p { margin: 6px 0; color: var(--muted); }
+.learning-label { color: var(--accent); }
+.learning-conflict { color: var(--error); }
+.learning-summary details { margin-top: 10px; padding: 10px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @keyframes arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spin { to { transform: rotate(360deg); } }

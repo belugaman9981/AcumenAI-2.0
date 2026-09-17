@@ -1,4 +1,6 @@
 from pathlib import Path
+from copy import deepcopy
+import math
 import yaml
 
 DEFAULTS = {
@@ -15,6 +17,7 @@ DEFAULTS = {
         "max_page_bytes": 524288,
     },
     "tasks": {"wait_seconds": 45, "poll_interval": 0.25},
+    "learning": {"recheck_after_days": 30},
     "web": {
         "bridge_host": "127.0.0.1",
         "bridge_port": 8765,
@@ -22,6 +25,16 @@ DEFAULTS = {
         "pairing_token": "change-me",
     },
 }
+
+
+def normalize_recheck_after_days(value):
+    """Use a positive, finite lifetime, falling back safely for invalid settings."""
+    try:
+        days = float(value) if not isinstance(value, bool) else 0
+    except (TypeError, ValueError, OverflowError):
+        return 30
+    return days if math.isfinite(days) and days > 0 else 30
+
 
 def _merge(a, b):
     out = dict(a)
@@ -34,6 +47,14 @@ def _merge(a, b):
 
 def load_config(path="config.yaml"):
     p = Path(path)
-    if not p.exists():
-        return DEFAULTS
-    return _merge(DEFAULTS, yaml.safe_load(p.read_text(encoding="utf-8")) or {})
+    config = deepcopy(DEFAULTS)
+    if p.exists():
+        config = _merge(config, yaml.safe_load(p.read_text(encoding="utf-8")) or {})
+    learning = config.get("learning")
+    if not isinstance(learning, dict):
+        learning = {}
+    config["learning"] = {
+        **learning,
+        "recheck_after_days": normalize_recheck_after_days(learning.get("recheck_after_days", 30)),
+    }
+    return config

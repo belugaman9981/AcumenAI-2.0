@@ -1,8 +1,10 @@
 from pathlib import Path
-from urllib.parse import urlsplit
 from .research import WebResearcher
 from .homework import solve_math
-from .knowledge import KnowledgeStore, clean_candidate, select_answer
+from .knowledge import KnowledgeStore, clean_candidate, select_answer, candidate_fingerprint
+from .learning import assess_learning
+from .learning_review import adds_evidence
+from .storage import utc_now
 from .sessions import SessionStore
 from .weather import weather_from_text
 from .time_service import TimeProvider, is_time_request
@@ -39,16 +41,19 @@ class TaskProcessor:
         if requires_fresh_data(query):
             return
         candidate = clean_candidate(self._candidate(query, result, kind))
-        supported = False
-        for source in candidate["sources"]:
-            try:
-                url = urlsplit(source.get("url", ""))
-                supported |= url.scheme in {"http", "https"} and bool(url.hostname)
-                supported |= kind in {"math", "homework"} and source.get("url") == "local://sympy"
-            except (TypeError, ValueError):
-                continue
-        if candidate["answer"] and candidate["confidence"] >= .6 and supported:
-            self.sessions.add_candidate(session_id, candidate)
+        if not assess_learning(candidate)["eligible"]:
+            return
+        saved = self.knowledge.all()
+        existing = select_answer(saved, query, max_age_days=self._recheck_days())
+        if (existing and candidate_fingerprint(existing) == candidate_fingerprint(candidate)
+                and not adds_evidence(candidate, [existing])):
+            return
+        candidate["researched_at"] = utc_now()
+        self.sessions.add_candidate(session_id, candidate)
+
+    def _recheck_days(self):
+        learning = self.config.get("learning", {})
+        return learning.get("recheck_after_days", 30) if isinstance(learning, dict) else 30
 
     def process(self, task_type, payload, session_id):
         query = payload.get("query", "").strip()
@@ -70,6 +75,7 @@ class TaskProcessor:
             pending = self.sessions.get(session_id) or {}
             hit = select_answer(
                 self.knowledge.all() + pending.get("candidates", []), query,
+                max_age_days=self._recheck_days(),
             )
             if hit:
                 self.knowledge.record_use(hit.get("id"))
