@@ -66,6 +66,14 @@ class SessionStore:
         for index, old in enumerate(data["candidates"]):
             if candidate_fingerprint(old) == key:
                 merged = merge_candidate(old, candidate)
+                # merge_candidate always pins "researched_at" (even to None) so
+                # that KnowledgeStore's later "updated_at" stamp can never be
+                # mistaken for a fresh research date. Session candidates never
+                # get that separate stamp, so a bare None placeholder here isn't
+                # a real change -- drop it before deciding whether to persist,
+                # so re-learning the exact same fact doesn't force a disk write.
+                if merged.get("researched_at") is None and "researched_at" not in old:
+                    merged.pop("researched_at", None)
                 if merged != old:
                     candidates = list(data["candidates"])
                     candidates[index] = merged

@@ -174,7 +174,10 @@ def merge_candidate(existing, incoming):
     if "evidence" in merged or "evidence" in incoming:
         merged["evidence"] = _merge_evidence(merged.get("evidence"), incoming.get("evidence"))
     # Preserve the research age when saving, merging snapshots, or adding sources.
-    # Only a valid newer research date can refresh it.
+    # Only a valid newer research date can refresh it. The field is pinned
+    # explicitly (even to None) so that a later "updated_at" stamp can never
+    # be mistaken, via the fallback chain in _research_timestamp_value, for
+    # a fresh research date on a record that was never actually re-researched.
     existing_stamp = _research_timestamp_value(existing)
     merged["researched_at"] = existing_stamp
     previous = _parse_timestamp(existing_stamp)
@@ -198,9 +201,16 @@ def matching_answers(items, query):
     )]
 
 
-def select_answer(items, query, *, max_age_days=30, now=None):
-    """Reuse recent, unambiguous answers; usage is not proof of truth."""
-    matches = matching_answers(items, query)
+def select_answer(items, query, *, max_age_days=30, now=None, matches=None):
+    """Reuse recent, unambiguous answers; usage is not proof of truth.
+
+    Pass a pre-filtered `matches` (e.g. from an index) to skip re-scanning
+    `items`; the result is identical to computing matching_answers(items,
+    query) yourself, this just lets a caller who already knows the matches
+    avoid doing that scan twice.
+    """
+    if matches is None:
+        matches = matching_answers(items, query)
     answers = {
         _text(item["answer"]) if item.get("kind") == "math"
         else _text(item["answer"]).casefold() for item in matches
@@ -221,23 +231,82 @@ class KnowledgeStore:
         self.path = root / "knowledge.json"
         self.js_path = root / "knowledge.js"
         root.mkdir(parents=True, exist_ok=True)
+        self._cache = None
+        self._cache_mtime = None
+        self._research_index = None
+        self._math_index = None
         if not self.path.exists():
             self._save({"version": 1, "items": []})
 
+    def _build_indices(self):
+        # matching_answers() previously had to walk every stored item and
+        # call normalize_question() on each one for every single lookup --
+        # by far the biggest cost in answer reuse once the knowledge base
+        # has any real size. Index items by the same keys matching_answers
+        # compares on, so a lookup becomes a couple of dict hits instead of
+        # a full O(n) rescan. Each entry keeps the item's original position
+        # so results can be restored to the exact order matching_answers
+        # would have produced (needed for correct confidence tie-breaking).
+        research_index = {}
+        math_index = {}
+        for position, item in enumerate(self._cache.get("items", [])):
+            if not item.get("answer"):
+                continue
+            if item.get("kind") == "math":
+                math_index.setdefault(_text(item.get("query")), []).append((position, item))
+            else:
+                key = normalize_question(item.get("query", ""))
+                research_index.setdefault(key, []).append((position, item))
+        self._research_index = research_index
+        self._math_index = math_index
+
+    def _indexed_matches(self, query):
+        """Equivalent to matching_answers(self.all(), query), via the index."""
+        wanted = normalize_question(query)
+        if not wanted or requires_fresh_data(query):
+            return []
+        self._load()
+        candidates = self._math_index.get(_text(query), []) + self._research_index.get(wanted, [])
+        candidates.sort(key=lambda pair: pair[0])
+        return [item for _, item in candidates]
+
+    def _disk_mtime(self):
+        try:
+            return self.path.stat().st_mtime_ns
+        except OSError:
+            return None
+
     def _load(self):
-        return read_json(self.path, {"version": 1, "items": []})
+        # Lookups/search/record_use are called far more often than saves, and
+        # each one previously re-read and re-parsed the whole knowledge.json
+        # from disk. Cache the parsed data and only touch disk again when the
+        # file's mtime has actually moved (e.g. another process wrote it).
+        # No defensive copy: every in-place mutation of this data within the
+        # class (add_many/record_use/delete) is always followed by _save()
+        # in the same call, which refreshes the cache to match, and every
+        # other caller in the codebase only reads the result.
+        mtime = self._disk_mtime()
+        if self._cache is None or mtime != self._cache_mtime:
+            self._cache = read_json(self.path, {"version": 1, "items": []})
+            self._cache_mtime = mtime
+            self._build_indices()
+        return self._cache
 
     def _save(self, data):
         atomic_write_json(self.path, data)
         js = "window.ACUMEN_KNOWLEDGE = " + json.dumps(data, ensure_ascii=False, indent=2) + ";\n"
         self.js_path.write_text(js, encoding="utf-8")
+        self._cache = data
+        self._cache_mtime = self._disk_mtime()
+        self._build_indices()
 
     def all(self):
         return self._load()["items"]
 
     def lookup(self, query, *, max_age_days=30, now=None):
         """Reuse a recent, unambiguous answer to the same normalized question."""
-        return select_answer(self.all(), query, max_age_days=max_age_days, now=now)
+        matches = self._indexed_matches(query)
+        return select_answer(self.all(), query, max_age_days=max_age_days, now=now, matches=matches)
 
     def record_use(self, item_id):
         """Track actual retrieval without inflating confidence."""
