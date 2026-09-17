@@ -9,6 +9,7 @@ from werkzeug.wsgi import get_input_stream
 from .config import load_config
 from .client import AcumenClient
 from .knowledge import KnowledgeStore
+from .sessions import candidate_review_id, PendingLearningChanged
 
 def make_app(root: Path, cfg):
     app = Flask(__name__, static_folder=None)
@@ -107,14 +108,27 @@ def make_app(root: Path, cfg):
     def session_status():
         with lock:
             data = client.session_store.get(client.session_id) or {}
-            return jsonify({"candidates": data.get("candidates", []), "show_sources": client.show_sources})
+            candidates = [dict(candidate, review_id=candidate_review_id(candidate))
+                          for candidate in data.get("candidates", [])]
+            return jsonify({"candidates": candidates, "show_sources": client.show_sources})
 
     @app.post("/api/session/learning")
     def resolve_learning():
         data = request.get_json(silent=True)
         if not isinstance(data, dict) or not isinstance(data.get("action"), str) or data["action"] not in {"save", "discard"}:
             return jsonify({"error": "Choose save or discard."}), 400
+        if "item_id" in data and (not isinstance(data["item_id"], str) or not data["item_id"].strip()):
+            return jsonify({"error": "item_id must be nonempty text."}), 400
         with lock:
+            if "item_id" in data:
+                try:
+                    count = client.session_store.resolve_pending(
+                        client.session_id, data["action"], knowledge, item_id=data["item_id"],
+                    )
+                except PendingLearningChanged as error:
+                    return jsonify({"error": str(error)}), 409
+                verb = "Saved" if data["action"] == "save" else "Discarded"
+                return jsonify({"ok": True, "answer": f"{verb} {count} learning item(s).", "count": count})
             return jsonify(client._execute("session_learning", data["action"]))
 
     @app.get("/api/knowledge")

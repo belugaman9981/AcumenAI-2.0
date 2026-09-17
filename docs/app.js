@@ -5,7 +5,66 @@ let recentQuestions = [];
 let pairedConfig = null, pairing = false;
 let pendingQuestion = null, restoring = false, checking = false;
 let connectionCheck = 0, knowledgeRequest = 0, sessionRequest = 0;
+let searchMatches = [], searchIndex = -1;
 const emptyState = $("#emptyChat").cloneNode(true);
+function selectMatch(index, scroll = false) {
+  searchIndex = searchMatches.length ? (index + searchMatches.length) % searchMatches.length : -1;
+  searchMatches.forEach((match, i) => match.classList.toggle("current", i === searchIndex));
+  $("#previousMatch").disabled = $("#nextMatch").disabled = !searchMatches.length;
+  $("#chatSearchCount").textContent = searchMatches.length ? `${searchIndex + 1} of ${searchMatches.length}`
+    : $("#chatSearch").value.trim() ? "No matches" : "Type to search";
+  if (scroll && searchIndex >= 0) {
+    const match = searchMatches[searchIndex];
+    chat.scrollTop += match.getBoundingClientRect().top - chat.getBoundingClientRect().top - chat.clientHeight / 3;
+    updateLatest();
+  }
+}
+function searchChat(scroll = false) {
+  const query = $("#chatSearchPanel").hidden ? "" : $("#chatSearch").value.trim();
+  const previous = searchIndex;
+  searchMatches = [];
+  // Escape every code point: punctuation is literal, never a regular expression.
+  const pattern = query ? new RegExp(Array.from(query, char => "\\u{" + char.codePointAt(0).toString(16) + "}").join(""), "giu") : null;
+  chat.querySelectorAll(".message-text").forEach(content => {
+    const text = content.textContent;
+    content.replaceChildren();
+    let start = 0;
+    if (pattern) {
+      for (const match of text.matchAll(pattern)) {
+        content.append(document.createTextNode(text.slice(start, match.index)));
+        const highlight = document.createElement("mark");
+        highlight.className = "chat-match";
+        highlight.textContent = match[0];
+        content.append(highlight);
+        searchMatches.push(highlight);
+        start = match.index + match[0].length;
+      }
+    }
+    content.append(document.createTextNode(text.slice(start)));
+  });
+  selectMatch(scroll ? 0 : Math.max(0, Math.min(previous, searchMatches.length - 1)), scroll);
+}
+function closeChatSearch(focus = false) {
+  $("#chatSearchPanel").hidden = true;
+  $("#findChat").setAttribute("aria-expanded", "false");
+  $("#chatSearch").value = "";
+  searchChat();
+  if (focus) $("#findChat").focus({preventScroll: true});
+}
+$("#findChat").onclick = () => {
+  $("#chatSearchPanel").hidden = false;
+  $("#findChat").setAttribute("aria-expanded", "true");
+  $("#chatSearch").focus();
+};
+$("#chatSearch").oninput = () => searchChat(true);
+$("#chatSearch").onkeydown = event => {
+  if (event.isComposing) return;
+  if (event.key === "Enter") { event.preventDefault(); selectMatch(searchIndex + (event.shiftKey ? -1 : 1), true); }
+  if (event.key === "Escape") { event.preventDefault(); closeChatSearch(true); }
+};
+$("#previousMatch").onclick = () => selectMatch(searchIndex - 1, true);
+$("#nextMatch").onclick = () => selectMatch(searchIndex + 1, true);
+$("#closeSearch").onclick = () => closeChatSearch(true);
 function setStatus(text, state = "connected") {
   statusBox.textContent = text;
   statusBox.dataset.state = state;
@@ -24,6 +83,7 @@ function saveConversation() {
   } catch { storageUnavailable(); }
 }
 function restoreConversation() {
+  closeChatSearch();
   transcript = [];
   recentQuestions = [];
   pendingQuestion = null;
@@ -127,8 +187,9 @@ function setBusy(value) {
   $("#reconnectBtn").disabled = value || checking || pairing;
   $("#clearChat").disabled = value || !transcript.length;
   $("#exportChat").disabled = !transcript.length;
+  $("#findChat").disabled = !transcript.length;
   $("#saveLearning").disabled = $("#discardLearning").disabled = value || !pendingCount;
-  document.querySelectorAll(".retry, .repeat, .delete-knowledge").forEach(button => { button.disabled = value; });
+  document.querySelectorAll(".retry, .repeat, .delete-knowledge, .review-learning").forEach(button => { button.disabled = value; });
 }
 function add(role, text, retryQuestion = null, failed = false) {
   const follow = role === "user" || nearLatest();
@@ -160,6 +221,7 @@ function add(role, text, retryQuestion = null, failed = false) {
   transcript.push({role, text, retryQuestion, failed});
   saveConversation();
   chat.append(message);
+  if (!$("#chatSearchPanel").hidden) searchChat();
   if (follow) chat.scrollTop = role === "user" ? chat.scrollHeight : message.offsetTop - 20;
   updateLatest();
   setBusy(busy);
@@ -214,6 +276,19 @@ async function refreshSession() {
         link.textContent = source.title || url.hostname;
         row.append(link, document.createTextNode(" "));
       } catch { /* Skip unusable source links. */ }
+    }
+    if (item.review_id) {
+      const actions = document.createElement("div");
+      actions.className = "toolbar";
+      for (const action of ["save", "discard"]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "review-learning";
+        button.textContent = action === "save" ? "Save answer" : "Discard answer";
+        button.onclick = () => resolveLearning(action, item.review_id);
+        actions.append(button);
+      }
+      row.append(actions);
     }
     box.append(row);
   }
@@ -314,6 +389,7 @@ $("#clearChat").onclick = () => {
   if (busy || !confirm("Clear the chat display? Export first if you want a copy. Saved and pending learning will stay.")) return;
   transcript = [];
   recentQuestions = [];
+  closeChatSearch();
   saveConversation();
   renderRecent();
   chat.replaceChildren(emptyState.cloneNode(true));
@@ -418,12 +494,12 @@ async function refreshKnowledge() {
 $("#refreshKnowledge").onclick = refreshKnowledge;
 $("#knowledgePanel").addEventListener("toggle", () => { if ($("#knowledgePanel").open) refreshKnowledge(); });
 $("#knowledgeSearch").oninput = renderKnowledge;
-async function resolveLearning(action) {
+async function resolveLearning(action, itemId = null) {
   if (busy) return;
-  if (action === "discard" && !confirm("Discard all new learning? Saved knowledge will stay.")) return;
+  if (action === "discard" && !confirm(itemId ? "Discard this answer from new learning? Saved knowledge will stay." : "Discard all new learning? Saved knowledge will stay.")) return;
   setBusy(true);
   try {
-    const result = await api("/api/session/learning", {method: "POST", body: JSON.stringify({action})});
+    const result = await api("/api/session/learning", {method: "POST", body: JSON.stringify(itemId ? {action, item_id: itemId} : {action})});
     setStatus(result.answer);
     await refreshSession();
     await refreshKnowledge();

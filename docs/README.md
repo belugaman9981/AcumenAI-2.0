@@ -39,8 +39,15 @@ Choose a starter question or type a message. Enter sends and Shift+Enter inserts
 new line. You can copy answers, export the displayed conversation, toggle sources,
 or retry a request after fixing a connection problem.
 
-Expand **New learning** to review answers and save or discard them without closing
-the session. Expand **Saved knowledge** to refresh, filter, or delete saved items.
+**Find in chat** highlights literal text in your conversation without changing the
+draft or exported chat. Use the arrow buttons or Enter / Shift+Enter to move
+between matches; Escape closes it.
+
+Expand **New learning** to review answers. Use **Save answer** / **Discard answer**
+for one item, or **Save all** / **Discard all** for the whole list. Other pending
+items stay available after an individual action. If an item changed in another
+tab, refresh the connection before reviewing it again. Expand **Saved knowledge**
+to refresh, filter, or delete saved items.
 The last 100 messages and recent questions recover after refreshing the same tab,
 using browser session storage. Export chat for a lasting copy; closing the tab or
 clearing browser storage can remove recovery data. Pairing settings are saved in

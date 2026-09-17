@@ -30,6 +30,7 @@
     </section>
     <div class="toolbar">
       <button id="helpBtn" type="button">Help</button>
+      <button id="findChat" type="button" aria-expanded="false" aria-controls="chatSearchPanel" disabled>Find in chat</button>
       <button id="exportChat" type="button" disabled>Export chat</button>
       <button id="clearChat" type="button" disabled>Clear view</button>
       <label class="inline">Theme
@@ -40,6 +41,14 @@
         </select>
       </label>
       <label class="inline"><input id="showSources" type="checkbox" checked> Show sources</label>
+    </div>
+    <div id="chatSearchPanel" class="chat-search" role="search" aria-label="Find in conversation" hidden>
+      <label class="sr-only" for="chatSearch">Find text in this chat</label>
+      <input id="chatSearch" type="search" placeholder="Find text in this chat…" maxlength="256" autocomplete="off">
+      <span id="chatSearchCount" role="status">Type to search</span>
+      <button id="previousMatch" type="button" aria-label="Previous match" disabled>↑</button>
+      <button id="nextMatch" type="button" aria-label="Next match" disabled>↓</button>
+      <button id="closeSearch" type="button">Done</button>
     </div>
     <div class="chat-container">
     <section id="chat" role="log" aria-label="Conversation" aria-live="polite" tabindex="0">
@@ -67,7 +76,7 @@
     <div class="aside-heading"><span class="eyebrow">YOUR NOTEBOOK</span><h2>Keep the useful bits.</h2><p class="hint">Review what Acumen learns and choose what to save.</p></div>
     <details id="learningPanel">
       <summary>New learning <span id="learningCount">(0)</span></summary>
-      <p class="hint">Review these answers, then save or discard them. Saving keeps them on your local computer.</p>
+      <p class="hint">Save or discard each answer, or use the buttons below to handle all of them. Saved answers stay on your computer.</p>
       <div id="learning">Connect to review new learning.</div>
       <div class="toolbar">
         <button id="saveLearning" type="button" disabled>Save all</button>

@@ -1,6 +1,19 @@
 from pathlib import Path
+import hashlib
+import json
 from .storage import atomic_write_json, read_json, utc_now, new_id
 from .knowledge import clean_candidate, candidate_fingerprint, merge_candidate
+
+
+def candidate_review_id(candidate):
+    """Identify the exact pending revision, including its evidence and metadata."""
+    serialized = json.dumps(candidate, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+class PendingLearningChanged(LookupError):
+    """The selected learning item has changed or is no longer pending."""
+
 
 class SessionStore:
     def __init__(self, root: Path):
@@ -55,20 +68,33 @@ class SessionStore:
         if p.exists():
             p.unlink()
 
-    def resolve_pending(self, session_id, action, knowledge_store):
+    def resolve_pending(self, session_id, action, knowledge_store, item_id=None):
         """Save or discard current candidates while keeping the session open."""
         if action not in {"save", "discard"}:
             raise ValueError("Choose save or discard.")
+        if item_id is not None and (not isinstance(item_id, str) or not item_id.strip()):
+            raise ValueError("item_id must be nonempty text.")
         data = self.get(session_id)
         candidates = (data or {}).get("candidates", [])
-        if not candidates:
+        selected_index = None
+        if item_id is not None:
+            selected_index = next((index for index, candidate in enumerate(candidates)
+                                   if candidate_review_id(candidate) == item_id), None)
+            if selected_index is None:
+                raise PendingLearningChanged("This learning item changed or was already reviewed. Refresh the learning list and try again.")
+            selected = [candidates[selected_index]]
+        else:
+            selected = candidates
+        if not selected:
             return 0
         if action == "save":
-            knowledge_store.add_many(candidates)
+            knowledge_store.add_many(selected)
         # Keep candidates available for retry if saving raises an error.
-        data["candidates"] = []
+        data["candidates"] = [] if item_id is None else [
+            candidate for index, candidate in enumerate(candidates) if index != selected_index
+        ]
         self._write(session_id, data)
-        return len(candidates)
+        return len(selected)
 
     def finalize_interactive(self, session_id, knowledge_store):
         data = self.get(session_id)

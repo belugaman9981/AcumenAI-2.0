@@ -182,6 +182,11 @@ copy buttons, chat export, and retry buttons for failed requests. Enter sends;
 Shift+Enter adds a line. You can draft the next question while Acumen works.
 The connection indicator checks your pairing token as well as the bridge.
 
+Use **Find in chat** to highlight text in the displayed conversation. The arrows
+move between matches; Enter moves forward, Shift+Enter moves backward, and Escape
+closes search. Search is case-insensitive and treats punctuation literally. It
+does not change your draft, exported transcript, or saved answers.
+
 The chat scrolls independently above the composer, which grows as you type.
 Replies preserve your reading position when you scroll back; use **Latest message**
 to return to the bottom. A waiting indicator appears while Acumen answers. Learning
@@ -199,7 +204,11 @@ Up in an empty message box recalls the last one. **Ask again** repeats a questio
 without replacing a new draft you are typing.
 
 Open **New learning** to review candidate answers and their sources, then use
-**Save all** or **Discard all** without ending the session. **Saved knowledge**
+**Save answer** or **Discard answer** on an individual item. Other pending answers
+remain available for review. **Save all** and **Discard all** still work for the
+whole list without ending the session. If another tab has already handled or
+changed an item, Acumen asks you to refresh rather than acting on an outdated
+selection. **Saved knowledge**
 can be filtered by question or answer. **Clear view** clears the visible chat;
 saved and pending learning stay available. Clearing also removes this tab's chat
 recovery copy. Download the conversation as a text file with **Export chat**.
