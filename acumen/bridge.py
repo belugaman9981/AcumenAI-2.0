@@ -1,8 +1,11 @@
 from pathlib import Path
+from io import BytesIO
 import argparse
 import secrets
 from threading import RLock
 from flask import Flask, request, jsonify, send_from_directory
+from werkzeug.exceptions import HTTPException, InternalServerError, RequestEntityTooLarge
+from werkzeug.wsgi import get_input_stream
 from .config import load_config
 from .client import AcumenClient
 from .knowledge import KnowledgeStore
@@ -19,9 +22,33 @@ def make_app(root: Path, cfg):
     lock = RLock()
     app.extensions["acumen_client"] = client
     app.config["ACUMEN_PAIRING_TOKEN"] = token
+    app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+
+    @app.errorhandler(HTTPException)
+    def http_error(error):
+        if not request.path.startswith("/api/"):
+            return error
+        response = error.get_response()
+        message = error.description
+        if isinstance(error, RequestEntityTooLarge):
+            message = "This request is too large. Shorten your message and try again (64 KiB limit)."
+        response.data = app.json.dumps({"error": message})
+        response.content_type = "application/json"
+        return response
+
+    @app.errorhandler(Exception)
+    def unexpected_error(error):
+        app.logger.exception("Unable to complete %s %s", request.method, request.path)
+        if not request.path.startswith("/api/"):
+            return InternalServerError()
+        return jsonify({
+            "error": "The local server could not complete this request. Check the server terminal for details."
+        }), 500
 
     @app.after_request
     def cors(resp):
+        if request.path.startswith("/api/"):
+            resp.headers["Cache-Control"] = "no-store"
         origin = request.headers.get("Origin")
         if origin in allowed:
             resp.headers["Access-Control-Allow-Origin"] = origin
@@ -37,6 +64,16 @@ def make_app(root: Path, cfg):
             return None
         if request.headers.get("X-Acumen-Token") != token:
             return jsonify({"error": "bad pairing token"}), 401
+        limit = app.config["MAX_CONTENT_LENGTH"]
+        if request.content_length is not None and request.content_length > limit:
+            raise RequestEntityTooLarge()
+        if request.environ.get("wsgi.input_terminated"):
+            # Read one extra byte to distinguish a complete body at the limit
+            # from a chunked body that Werkzeug would otherwise truncate.
+            body = get_input_stream(request.environ, max_content_length=limit + 1).read()
+            if len(body) > limit:
+                raise RequestEntityTooLarge()
+            request.environ["wsgi.input"] = BytesIO(body)
 
     @app.get("/")
     @app.get("/index.html")

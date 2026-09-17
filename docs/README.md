@@ -41,7 +41,9 @@ or retry a request after fixing a connection problem.
 
 Expand **New learning** to review answers and save or discard them without closing
 the session. Expand **Saved knowledge** to refresh, filter, or delete saved items.
-Chat text stays in tab memory unless you export it; pairing settings are saved in
+The last 100 messages and recent questions recover after refreshing the same tab,
+using browser session storage. Export chat for a lasting copy; closing the tab or
+clearing browser storage can remove recovery data. Pairing settings are saved in
 the browser. Tabs paired to one bridge share its learning session.
 
 Small conveniences: choose System, Light, or Dark from the theme menu; unsent
@@ -49,7 +51,13 @@ drafts recover after a refresh in the same tab. Drafts are kept separately for e
 bridge URL. Recent questions lists the last ten distinct questions in this page;
 select one to edit it, or press Up in an empty message box to recall the latest.
 **Ask again** repeats a question using normal answer and freshness rules while
-preserving your current draft. Clearing the chat view also clears recent questions.
+preserving your current draft. Clearing the chat view also clears recent questions
+and this tab's recovery copy.
+
+Use **Check connection** or **Reconnect** to refresh connection and learning state
+while keeping your draft. A reload during a request shows an interruption notice
+with a manual retry; no question is automatically resent. The server may still
+finish that request, so check **New learning** before retrying.
 
 Run the regression suite with `python -B -m pytest -q`. The optional browser test
 in `tests/test_browser_usability.py` uses Playwright and an installed Chrome browser.

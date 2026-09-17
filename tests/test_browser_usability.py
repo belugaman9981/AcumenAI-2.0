@@ -42,7 +42,10 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             context = browser.new_context(permissions=["clipboard-read", "clipboard-write"], viewport={"width": 1100, "height": 900})
             page = context.new_page()
             errors = []
+            chat_requests = []
             page.on("pageerror", lambda error: errors.append(str(error)))
+            page.on("request", lambda request: chat_requests.append(request.url)
+                    if request.method == "POST" and request.url.endswith("/api/chat") else None)
             if not same_origin:
                 page.add_init_script(f"localStorage.setItem('acumen_bridge', {json.dumps(bridge_url)});")
             page.goto(origin)
@@ -77,7 +80,8 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             page.locator("#message").press("Shift+Enter")
             assert "\n" in page.locator("#message").input_value()
             page.locator("#message").press("Enter")
-            playwright.expect(page.locator(".acumen .message-text").last).to_contain_text("x = 4")
+            # The first equation loads SymPy; allow cold-start time on slower PCs.
+            playwright.expect(page.locator(".acumen .message-text").last).to_contain_text("x = 4", timeout=15000)
             playwright.expect(page.locator("#learningCount")).to_have_text("(1)")
             page.get_by_role("button", name="Copy", exact=True).last.click()
             playwright.expect(page.get_by_role("button", name="Copied", exact=True)).to_be_visible()
@@ -94,6 +98,14 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             playwright.expect(page.locator("#learningCount")).to_have_text("(2)")
             playwright.expect(page.locator("#sendBtn")).to_be_enabled()
             page.locator("#message").fill("Keep my new draft")
+            messages = page.locator(".message-text").all_text_contents()
+            sent_count = len(chat_requests)
+            page.reload()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator(".message-text")).to_have_text(messages)
+            playwright.expect(page.locator("#recentQuestions option")).to_have_count(3)
+            playwright.expect(page.locator("#message")).to_have_value("Keep my new draft")
+            assert len(chat_requests) == sent_count
             page.locator(".repeat").last.click()
             playwright.expect(page.locator("#sendBtn")).to_be_enabled()
             playwright.expect(page.locator(".acumen .message-text").last).to_have_text("21")
@@ -148,6 +160,22 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             assert page.locator(".msg").last.evaluate("element => getComputedStyle(element).animationName") == "none"
             playwright.expect(page.locator("#message")).to_have_value("My next draft")
             playwright.expect(page.locator("#learningCount")).to_have_text("(1)")
+
+            # A failed refresh must not leave stale learning actions available.
+            page.route("**/api/session", lambda route: route.abort(), times=1)
+            page.locator("#reconnectBtn").click()
+            playwright.expect(page.locator("#status")).to_contain_text("Could not reach Acumen")
+            playwright.expect(page.locator("#saveLearning")).to_be_disabled()
+            playwright.expect(page.locator("#discardLearning")).to_be_disabled()
+            playwright.expect(page.locator("#learning .knowledge-item")).to_have_count(0)
+            playwright.expect(page.locator("#learningCount")).not_to_have_text("(1)")
+            playwright.expect(page.locator("#message")).to_have_value("My next draft")
+            assert "33" in client.chat("calculate 30+3")
+            page.locator("#reconnectBtn").click()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator("#learningCount")).to_have_text("(2)")
+            playwright.expect(page.locator("#saveLearning")).to_be_enabled()
+            playwright.expect(page.locator("#message")).to_have_value("My next draft")
             page.once("dialog", lambda dialog: dialog.accept())
             page.locator("#discardLearning").click()
             playwright.expect(page.locator("#learningCount")).to_have_text("(0)")
@@ -158,10 +186,18 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             page.locator("#message").fill("/help")
             page.locator("#message").press("Enter")
             playwright.expect(page.locator(".retry")).to_be_enabled()
+            messages = page.locator(".message-text").all_text_contents()
+            sent_count = len(chat_requests)
+            page.reload()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator(".message-text")).to_have_text(messages)
+            playwright.expect(page.locator(".retry")).to_be_enabled()
+            assert len(chat_requests) == sent_count
             page.locator(".retry").click()
             playwright.expect(page.locator(".acumen .message-text").last).to_contain_text("starter questions")
             playwright.expect(page.locator("#sendBtn")).to_be_enabled()
 
+            page.get_by_text("Saved knowledge", exact=True).click()
             page.locator("#knowledgeSearch").fill("3*7")
             page.once("dialog", lambda dialog: dialog.accept())
             page.locator(".delete-knowledge").click()
@@ -176,6 +212,37 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             playwright.expect(page.locator("#recentQuestions")).to_be_disabled()
             playwright.expect(page.locator("#emptyChat")).to_be_visible()
             assert len(client.knowledge.all()) == 1
+            sent_count = len(chat_requests)
+            page.reload()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator(".msg")).to_have_count(0)
+            playwright.expect(page.locator("#recentQuestions")).to_be_disabled()
+            playwright.expect(page.locator("#emptyChat")).to_be_visible()
+            assert len(chat_requests) == sent_count
+
+            # Recover the state left by a tab reload during an unfinished request.
+            page.evaluate("""({url}) => sessionStorage.setItem(`acumen_chat:${url}`, JSON.stringify({
+                version: 1,
+                messages: [{role: "user", text: "calculate 5+5", retryQuestion: null, failed: false}],
+                recentQuestions: ["calculate 5+5"],
+                pendingQuestion: "calculate 5+5"
+            }))""", {"url": origin if same_origin else bridge_url})
+            page.reload()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator(".acumen .message-text").last).to_contain_text("reloaded before the answer arrived")
+            playwright.expect(page.locator(".retry")).to_be_enabled()
+            playwright.expect(page.locator("#activity")).not_to_be_visible()
+            assert len(chat_requests) == sent_count
+            messages = page.locator(".message-text").all_text_contents()
+            page.reload()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator(".message-text")).to_have_text(messages)
+            playwright.expect(page.locator(".retry")).to_be_enabled()
+            assert len(chat_requests) == sent_count
+            page.locator(".retry").click()
+            playwright.expect(page.locator(".acumen .message-text").last).to_have_text("10")
+            playwright.expect(page.locator("#sendBtn")).to_be_enabled()
+            assert len(chat_requests) == sent_count + 1
 
             page.set_viewport_size({"width": 390, "height": 844})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
@@ -198,3 +265,169 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
         for thread in threads:
             thread.join(timeout=5)
         client.local_processor.close()
+
+
+def test_browser_bridge_isolation_and_unavailable_storage():
+    playwright = pytest.importorskip("playwright.sync_api")
+    project = Path(__file__).resolve().parents[1]
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(SimpleHTTPRequestHandler, directory=str(project / "docs")))
+    origin = f"http://127.0.0.1:{server.server_port}"
+    other_bridge = f"{origin}/second"
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with playwright.sync_playwright() as p:
+            try:
+                browser = p.chromium.launch(channel="chrome", headless=True)
+            except playwright.Error as error:
+                pytest.skip(f"Chrome unavailable: {error}")
+            context = browser.new_context()
+            page = context.new_page()
+            errors, sent_questions, delayed = [], [], {}
+            page.on("pageerror", lambda error: errors.append(str(error)))
+
+            # Record completion after callers have processed each response, so
+            # delayed-response assertions cannot pass before rendering finishes.
+            page.add_init_script("""(() => {
+                window.parsedApiResponses = [];
+                const originalFetch = window.fetch;
+                window.fetch = async (...args) => {
+                    const response = await originalFetch(...args);
+                    const originalJson = response.json.bind(response);
+                    response.json = async () => {
+                        const data = await originalJson();
+                        setTimeout(() => window.parsedApiResponses.push(response.url), 0);
+                        return data;
+                    };
+                    return response;
+                };
+            })();""")
+
+            def fulfill(route, payload):
+                route.fulfill(status=200, content_type="application/json", body=json.dumps(payload))
+
+            def mock_api(route):
+                request = route.request
+                second = request.url.startswith(f"{other_bridge}/api/")
+                if request.url.endswith("/api/session"):
+                    if not second and "session" not in delayed:
+                        delayed["session"] = route
+                        return
+                    candidates = [{"query": "Second bridge learning", "answer": "Second answer"}] if second else []
+                    fulfill(route, {"candidates": candidates, "show_sources": True})
+                elif request.url.endswith("/api/knowledge"):
+                    if not second and "knowledge" not in delayed:
+                        delayed["knowledge"] = route
+                        return
+                    fulfill(route, {"items": [{"id": "second", "query": "Second bridge knowledge", "answer": "Second saved answer"}] if second else []})
+                elif request.url.endswith("/api/chat"):
+                    sent_questions.append((request.url, request.post_data_json["message"]))
+                    fulfill(route, {"reply": "Second bridge reply" if second else "Original bridge reply"})
+                else:
+                    route.fulfill(status=404)
+
+            page.route("**/api/**", mock_api)
+            page.goto(origin)
+            playwright.expect(page.locator("#status")).to_contain_text("Checking connection")
+            page.locator("#message").fill("Original bridge question")
+            page.locator("#message").press("Enter")
+            playwright.expect(page.locator(".acumen .message-text").last).to_have_text("Original bridge reply")
+            playwright.expect(page.locator("#sendBtn")).to_be_enabled()
+            page.locator("#message").fill("Original bridge draft")
+            page.get_by_text("Saved knowledge", exact=True).click()
+            playwright.expect(page.locator("#knowledge")).to_have_text("Loading…")
+
+            page.locator("#settingsBtn").click()
+            page.locator("#bridgeUrl").fill(other_bridge)
+            page.locator("#token").fill("second-token")
+            page.locator("#saveSettings").click()
+            playwright.expect(page.locator("#settings")).not_to_be_visible()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator("#learningCount")).to_have_text("(1)")
+            playwright.expect(page.locator("#knowledge")).to_contain_text("Second bridge knowledge")
+            playwright.expect(page.locator(".msg")).to_have_count(0)
+            playwright.expect(page.locator("#message")).to_have_value("")
+
+            # Complete both requests from the previous bridge after pairing.
+            completed = page.evaluate("window.parsedApiResponses.length")
+            fulfill(delayed["session"], {"candidates": [
+                {"query": "Stale first learning", "answer": "Old answer"},
+                {"query": "Another stale item", "answer": "Old answer"},
+            ], "show_sources": False})
+            page.wait_for_function("count => window.parsedApiResponses.length > count", arg=completed)
+            completed = page.evaluate("window.parsedApiResponses.length")
+            fulfill(delayed["knowledge"], {"items": [{"id": "stale", "query": "Stale first knowledge", "answer": "Old saved answer"}]})
+            page.wait_for_function("count => window.parsedApiResponses.length > count", arg=completed)
+            playwright.expect(page.locator("#learningCount")).to_have_text("(1)")
+            playwright.expect(page.locator("#learning")).to_contain_text("Second bridge learning")
+            playwright.expect(page.locator("#showSources")).to_be_checked()
+            playwright.expect(page.locator("#knowledge")).to_contain_text("Second bridge knowledge")
+            playwright.expect(page.locator("#knowledge")).not_to_contain_text("Stale first knowledge")
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+
+            # Returning to a bridge restores only that bridge's conversation.
+            page.locator("#settingsBtn").click()
+            page.locator("#bridgeUrl").fill(origin)
+            page.locator("#token").fill("original-token")
+            page.locator("#saveSettings").click()
+            playwright.expect(page.locator("#settings")).not_to_be_visible()
+            playwright.expect(page.locator("#reconnectBtn")).to_be_enabled()
+            playwright.expect(page.locator(".message-text")).to_have_text(["Original bridge question", "Original bridge reply"])
+            playwright.expect(page.locator("#message")).to_have_value("Original bridge draft")
+            page.reload()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+
+            # A slower connection check on the same bridge must not overwrite
+            # the session state fetched after a newer completed chat request.
+            delayed_check = {}
+
+            def delay_check(route):
+                delayed_check["route"] = route
+
+            page.route(f"{origin}/api/session", delay_check, times=1)
+            page.locator("#reconnectBtn").click()
+            playwright.expect(page.locator("#status")).to_contain_text("Checking connection")
+            page.locator("#message").fill("A question while reconnecting")
+            page.locator("#message").press("Enter")
+            playwright.expect(page.locator(".acumen .message-text").last).to_have_text("Original bridge reply")
+            playwright.expect(page.locator("#sendBtn")).to_be_enabled()
+            playwright.expect(page.locator("#learningCount")).to_have_text("(0)")
+            completed = page.evaluate("window.parsedApiResponses.length")
+            fulfill(delayed_check["route"], {"candidates": [{"query": "Outdated learning", "answer": "Old answer"}], "show_sources": False})
+            page.wait_for_function("count => window.parsedApiResponses.length > count", arg=completed)
+            playwright.expect(page.locator("#learningCount")).to_have_text("(0)")
+            playwright.expect(page.locator("#showSources")).to_be_checked()
+
+            # Shared localStorage can change in another tab; this tab must keep
+            # its active bridge and its conversation until explicitly switched.
+            page.evaluate("url => localStorage.setItem('acumen_bridge', url)", other_bridge)
+            page.locator("#message").fill("Keep using the original bridge")
+            page.locator("#message").press("Enter")
+            playwright.expect(page.locator(".acumen .message-text").last).to_have_text("Original bridge reply")
+            playwright.expect(page.locator("#sendBtn")).to_be_enabled()
+            assert sent_questions[-1] == (f"{origin}/api/chat", "Keep using the original bridge")
+            assert "Keep using the original bridge" in page.evaluate("url => sessionStorage.getItem(`acumen_chat:${url}`)", origin)
+            assert page.evaluate("url => sessionStorage.getItem(`acumen_chat:${url}`)", other_bridge) is None
+
+            # Same-bridge token correction must not replace an unsaved live
+            # draft with the older stored value when storage writes fail.
+            page.locator("#message").fill("An older saved draft")
+            page.evaluate("""() => {
+                Storage.prototype.setItem = function () { throw new DOMException('Storage unavailable', 'QuotaExceededError'); };
+            }""")
+            page.locator("#message").fill("Keep this live unsaved draft")
+            page.locator("#settingsBtn").click()
+            playwright.expect(page.locator("#bridgeUrl")).to_have_value(origin)
+            page.locator("#token").fill("replacement-token")
+            page.locator("#saveSettings").click()
+            playwright.expect(page.locator("#settings")).not_to_be_visible()
+            playwright.expect(page.locator("#reconnectBtn")).to_be_enabled()
+            playwright.expect(page.locator("#message")).to_have_value("Keep this live unsaved draft")
+            playwright.expect(page.locator("#composerHint")).to_contain_text("Browser storage unavailable")
+            assert not errors
+            context.close()
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

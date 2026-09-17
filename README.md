@@ -189,16 +189,31 @@ panels sit beside chat on desktop and below it on smaller screens. Pairing error
 stay in the dialog so you can correct the token, and saved knowledge loads when
 you open its panel. Animations respect your system's reduced-motion preference.
 
-Choose a System, Light, or Dark theme. Unsent drafts recover after refreshing the
-same tab. The recent-question menu keeps ten distinct questions for quick editing;
+Choose a System, Light, or Dark theme. Unsent drafts, your last 100 chat messages,
+and recent questions recover after refreshing the same tab. Recovery is stored
+in the browser's session storage, separately for each bridge URL; export chat for
+a lasting copy. Closing the tab or clearing browser storage can remove recovery
+data. If browser storage is unavailable, chat still works and the composer tells
+you to export instead. The recent-question menu keeps ten distinct questions for quick editing;
 Up in an empty message box recalls the last one. **Ask again** repeats a question
 without replacing a new draft you are typing.
 
 Open **New learning** to review candidate answers and their sources, then use
 **Save all** or **Discard all** without ending the session. **Saved knowledge**
 can be filtered by question or answer. **Clear view** clears the visible chat;
-saved and pending learning stay available. The transcript is held in tab memory
-and can be downloaded as a text file with **Export chat**.
+saved and pending learning stay available. Clearing also removes this tab's chat
+recovery copy. Download the conversation as a text file with **Export chat**.
+
+Use **Check connection** (or **Reconnect** after an error) to refresh the connection
+and pending learning without losing your draft. Connection checks have a timeout,
+and unavailable learning is marked unknown until you reconnect. If a page reloads
+while an answer is running, Acumen shows an interrupted-request notice with a
+manual retry button. It does not automatically resend the question; the server
+may still finish it, so check **New learning** before retrying.
+
+The bridge returns readable API errors and rejects request bodies above 64 KiB.
+Unexpected failures are logged in the server terminal; private API responses
+are marked not to be cached.
 
 These commands also work in chat and the command line:
 

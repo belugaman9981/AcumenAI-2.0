@@ -3,10 +3,54 @@ const chat = $("#chat"), statusBox = $("#status"), settings = $("#settings");
 let busy = false, transcript = [], savedKnowledge = [], pendingCount = 0, sourcesShown = true;
 let recentQuestions = [];
 let pairedConfig = null, pairing = false;
+let pendingQuestion = null, restoring = false, checking = false;
+let connectionCheck = 0, knowledgeRequest = 0, sessionRequest = 0;
 const emptyState = $("#emptyChat").cloneNode(true);
 function setStatus(text, state = "connected") {
   statusBox.textContent = text;
   statusBox.dataset.state = state;
+  $("#reconnectBtn").textContent = state === "error" ? "Reconnect" : "Check connection";
+}
+function storageUnavailable() {
+  $("#composerHint").textContent = "Enter to send · Shift+Enter for a new line · Browser storage unavailable; export chat to keep a copy";
+}
+function conversationKey() { return `acumen_chat:${cfg().url}`; }
+function saveConversation() {
+  if (restoring) return;
+  try {
+    if (!transcript.length && !pendingQuestion) sessionStorage.removeItem(conversationKey());
+    else sessionStorage.setItem(conversationKey(), JSON.stringify({version: 1,
+      messages: transcript.slice(-100), recentQuestions, pendingQuestion}));
+  } catch { storageUnavailable(); }
+}
+function restoreConversation() {
+  transcript = [];
+  recentQuestions = [];
+  pendingQuestion = null;
+  chat.replaceChildren(emptyState.cloneNode(true));
+  restoring = true;
+  chat.classList.add("restoring");
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(conversationKey()) || "null");
+    if (saved?.version === 1 && Array.isArray(saved.messages)) {
+      for (const item of saved.messages.slice(-100)) {
+        if (!item || !["user", "acumen"].includes(item.role) || typeof item.text !== "string") continue;
+        add(item.role, item.text, typeof item.retryQuestion === "string" ? item.retryQuestion : null, item.failed === true);
+      }
+      recentQuestions = Array.isArray(saved.recentQuestions)
+        ? [...new Set(saved.recentQuestions.filter(item => typeof item === "string" && item.trim()))].slice(0, 10) : [];
+      if (typeof saved.pendingQuestion === "string" && saved.pendingQuestion.trim()) {
+        add("acumen", "This page was reloaded before the answer arrived. Acumen may still finish the request. Check New learning before trying again.", saved.pendingQuestion, true);
+      }
+    }
+  } catch { /* A corrupt or unavailable snapshot must not prevent chatting. */ }
+  finally { restoring = false; }
+  renderRecent();
+  setBusy(false);
+  chat.scrollTop = chat.scrollHeight;
+  updateLatest();
+  saveConversation();
+  requestAnimationFrame(() => chat.classList.remove("restoring"));
 }
 function resizeComposer() {
   const input = $("#message");
@@ -28,7 +72,7 @@ function saveDraft() {
     const value = $("#message").value;
     if (value) sessionStorage.setItem(draftKey(), value);
     else sessionStorage.removeItem(draftKey());
-  } catch { /* Chat remains usable when browser storage is unavailable. */ }
+  } catch { storageUnavailable(); }
 }
 function restoreDraft() {
   try { $("#message").value = sessionStorage.getItem(draftKey()) || ""; }
@@ -70,8 +114,9 @@ function cfg() {
   const localPage = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
   const defaults = {url: localPage ? location.origin : "http://127.0.0.1:8765", token: ""};
   try {
-    return {url: localStorage.getItem("acumen_bridge") || defaults.url, token: localStorage.getItem("acumen_token") || ""};
-  } catch { return defaults; }
+    pairedConfig = {url: localStorage.getItem("acumen_bridge") || defaults.url, token: localStorage.getItem("acumen_token") || ""};
+  } catch { pairedConfig = defaults; }
+  return pairedConfig;
 }
 function setBusy(value) {
   busy = value;
@@ -79,6 +124,7 @@ function setBusy(value) {
   $("#sendBtn").textContent = value ? "Working…" : "Send";
   chat.setAttribute("aria-busy", String(value));
   $("#showSources").disabled = $("#settingsBtn").disabled = value;
+  $("#reconnectBtn").disabled = value || checking || pairing;
   $("#clearChat").disabled = value || !transcript.length;
   $("#exportChat").disabled = !transcript.length;
   $("#saveLearning").disabled = $("#discardLearning").disabled = value || !pendingCount;
@@ -111,7 +157,8 @@ function add(role, text, retryQuestion = null, failed = false) {
     retry.onclick = () => send(retryQuestion);
     message.append(retry);
   }
-  transcript.push({role, text});
+  transcript.push({role, text, retryQuestion, failed});
+  saveConversation();
   chat.append(message);
   if (follow) chat.scrollTop = role === "user" ? chat.scrollHeight : message.offsetTop - 20;
   updateLatest();
@@ -119,8 +166,10 @@ function add(role, text, retryQuestion = null, failed = false) {
 }
 async function api(path, options = {}, config = cfg()) {
   let response;
+  // Read-only checks should not leave controls stuck if the server disappears.
+  const signal = options.signal || (options.method && options.method !== "GET" ? undefined : AbortSignal.timeout(10000));
   try {
-    response = await fetch(config.url.replace(/\/+$/, "") + path, {...options,
+    response = await fetch(config.url.replace(/\/+$/, "") + path, {...options, signal,
       headers: {"X-Acumen-Token": config.token, "Content-Type": "application/json", ...options.headers}});
   } catch { throw new Error("Could not reach Acumen. Start the local bridge, then check your Pair settings."); }
   if (response.status === 401) throw new Error("Pairing token not accepted. Open Pair and check your token.");
@@ -128,10 +177,19 @@ async function api(path, options = {}, config = cfg()) {
     const result = await response.json().catch(() => ({}));
     throw new Error(result.error || "Acumen could not complete that action. Please try again.");
   }
-  return response.json();
+  try { return await response.json(); }
+  catch { throw new Error("Acumen returned an unreadable response. Check the server terminal, then reconnect."); }
 }
 async function refreshSession() {
-  const session = await api("/api/session"), items = session.candidates || [];
+  const config = cfg(), attempt = ++sessionRequest;
+  let session;
+  try { session = await api("/api/session", {}, config); }
+  catch (error) {
+    if (config !== cfg() || attempt !== sessionRequest) return false;
+    throw error;
+  }
+  if (config !== cfg() || attempt !== sessionRequest) return false;
+  const items = session.candidates || [];
   pendingCount = items.length;
   sourcesShown = session.show_sources;
   $("#showSources").checked = sourcesShown;
@@ -160,11 +218,33 @@ async function refreshSession() {
     box.append(row);
   }
   setBusy(busy);
+  return true;
 }
-async function check() {
-  try { await refreshSession(); setStatus("Connected and paired with local Acumen"); }
-  catch (error) { setStatus(error.message, "error"); pendingCount = 0; setBusy(busy); }
+function unavailableSession(error) {
+  sessionRequest++;
+  setStatus(error.message, "error");
+  pendingCount = 0;
+  $("#learningCount").textContent = "(?)";
+  $("#learning").textContent = "Reconnect to review current learning. Saved knowledge is unchanged.";
+  setBusy(busy);
 }
+async function check(force = false) {
+  if ((checking && !force) || busy) return;
+  const attempt = ++connectionCheck, config = cfg();
+  checking = true;
+  setBusy(busy);
+  setStatus("Checking connection…", "pending");
+  try {
+    const current = await refreshSession();
+    if (current && attempt === connectionCheck && config === cfg()) setStatus("Connected and paired with local Acumen");
+  }
+  catch (error) {
+    if (attempt === connectionCheck && config === cfg()) unavailableSession(error);
+  } finally {
+    if (attempt === connectionCheck) { checking = false; setBusy(busy); }
+  }
+}
+$("#reconnectBtn").onclick = () => check();
 async function send(text) {
   if (busy || !text.trim()) return;
   if (!text.startsWith("/")) {
@@ -172,14 +252,16 @@ async function send(text) {
     renderRecent();
   }
   setBusy(true);
+  pendingQuestion = text;
   add("user", text);
   $("#activity").hidden = false;
   try {
     const result = await api("/api/chat", {method: "POST", body: JSON.stringify({message: text})});
+    pendingQuestion = null;
     add("acumen", result.reply || "No reply received.", text.startsWith("/") ? null : text);
-    try { await refreshSession(); setStatus("Connected and paired with local Acumen"); }
-    catch (error) { setStatus(error.message, "error"); }
-  } catch (error) { add("acumen", error.message, text, true); setStatus(error.message, "error"); }
+    try { if (await refreshSession()) setStatus("Connected and paired with local Acumen"); }
+    catch (error) { unavailableSession(error); }
+  } catch (error) { pendingQuestion = null; add("acumen", error.message, text, true); unavailableSession(error); }
   finally {
     $("#activity").hidden = true;
     setBusy(false);
@@ -214,6 +296,7 @@ $("#showSources").onchange = async () => {
   setBusy(true);
   try {
     await api("/api/chat", {method: "POST", body: JSON.stringify({message: wanted ? "/show-source" : "/hide-source"})});
+    sessionRequest++;
     sourcesShown = wanted;
     setStatus(`Sources ${wanted ? "shown" : "hidden"} for future answers.`);
   } catch (error) { $("#showSources").checked = sourcesShown; setStatus(error.message, "error"); }
@@ -231,6 +314,7 @@ $("#clearChat").onclick = () => {
   if (busy || !confirm("Clear the chat display? Export first if you want a copy. Saved and pending learning will stay.")) return;
   transcript = [];
   recentQuestions = [];
+  saveConversation();
   renderRecent();
   chat.replaceChildren(emptyState.cloneNode(true));
   updateLatest();
@@ -265,16 +349,19 @@ $("#settings form").addEventListener("submit", async (event) => {
   $("#saveSettings").textContent = "Connecting…";
   try {
     await api("/api/session", {signal: AbortSignal.timeout(10000)}, candidate);
+    const changedBridge = candidate.url !== cfg().url;
+    saveDraft();
+    saveConversation();
     pairedConfig = candidate;
     try {
       localStorage.setItem("acumen_bridge", candidate.url);
       localStorage.setItem("acumen_token", candidate.token);
     } catch { /* Pairing still works for this page when storage is unavailable. */ }
-    restoreDraft();
+    if (changedBridge) { restoreDraft(); restoreConversation(); }
     savedKnowledge = [];
     renderKnowledge();
     settings.close();
-    await check();
+    await check(true);
     if ($("#knowledgePanel").open) await refreshKnowledge();
     $("#message").focus({preventScroll: true});
   } catch (error) {
@@ -284,6 +371,7 @@ $("#settings form").addEventListener("submit", async (event) => {
     pairing = false;
     settings.querySelectorAll("button, input").forEach(control => { control.disabled = false; });
     $("#saveSettings").textContent = "Save and connect";
+    setBusy(busy);
   }
 });
 $("#bridgeUrl").oninput = () => $("#bridgeUrl").setCustomValidity("");
@@ -305,6 +393,7 @@ function renderKnowledge() {
       setBusy(true);
       try {
         await api(`/api/knowledge/${encodeURIComponent(item.id)}`, {method: "DELETE"});
+        knowledgeRequest++;
         savedKnowledge = savedKnowledge.filter(saved => saved.id !== item.id);
         renderKnowledge();
       } catch (error) { setStatus(error.message, "error"); }
@@ -315,9 +404,16 @@ function renderKnowledge() {
   }
 }
 async function refreshKnowledge() {
+  const config = cfg(), attempt = ++knowledgeRequest;
   $("#knowledge").textContent = "Loading…";
-  try { const result = await api("/api/knowledge"); savedKnowledge = result.items || []; renderKnowledge(); }
-  catch (error) { $("#knowledge").textContent = error.message; }
+  try {
+    const result = await api("/api/knowledge", {}, config);
+    if (attempt !== knowledgeRequest || config !== cfg()) return;
+    savedKnowledge = result.items || [];
+    renderKnowledge();
+  } catch (error) {
+    if (attempt === knowledgeRequest && config === cfg()) $("#knowledge").textContent = error.message;
+  }
 }
 $("#refreshKnowledge").onclick = refreshKnowledge;
 $("#knowledgePanel").addEventListener("toggle", () => { if ($("#knowledgePanel").open) refreshKnowledge(); });
@@ -331,9 +427,10 @@ async function resolveLearning(action) {
     setStatus(result.answer);
     await refreshSession();
     await refreshKnowledge();
-  } catch (error) { setStatus(error.message, "error"); }
+  } catch (error) { unavailableSession(error); }
   finally { setBusy(false); }
 }
 $("#saveLearning").onclick = () => resolveLearning("save");
 $("#discardLearning").onclick = () => resolveLearning("discard");
+restoreConversation();
 check();

@@ -16,7 +16,10 @@
       <button id="settingsBtn">Pair</button>
     </header>
 
-    <section id="status" role="status" data-state="pending">Checking connection…</section>
+    <div class="connection-bar">
+      <section id="status" role="status" data-state="pending">Checking connection…</section>
+      <button id="reconnectBtn" type="button">Check connection</button>
+    </div>
     <div class="workspace">
     <section class="conversation" aria-label="Chat workspace">
     <section class="starters" aria-label="Try a question">
@@ -56,7 +59,7 @@
       <textarea id="message" rows="1" autocomplete="off" placeholder="Ask Acumen a question…" aria-describedby="composerHint" required></textarea>
       <button id="sendBtn">Send</button>
     </form>
-    <p class="hint" id="composerHint">Enter to send · Shift+Enter for a new line · Drafts saved in this tab</p>
+    <p class="hint" id="composerHint">Enter to send · Shift+Enter for a new line · Chat and drafts recover in this tab</p>
     </div>
     </section>
 
@@ -79,7 +82,7 @@
       <input id="knowledgeSearch" type="search" placeholder="Filter saved knowledge…">
       <div id="knowledge">Open this panel to browse your saved answers.</div>
     </details>
-    <p class="privacy-note">Saved knowledge stays on your computer. Export your chat to keep a copy of the conversation.</p>
+    <p class="privacy-note">Saved knowledge stays on your computer. This tab restores your last 100 messages after a refresh. Export chat to keep a lasting copy.</p>
     </aside>
     </div>
   </main>
