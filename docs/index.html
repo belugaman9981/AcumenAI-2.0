@@ -10,13 +10,15 @@
   <main>
     <header>
       <div>
-        <h1>AcumenAI</h1>
+        <h1><span class="brand-mark" aria-hidden="true">a</span> AcumenAI</h1>
         <p>Ask, discover, and keep what you learn.</p>
       </div>
       <button id="settingsBtn">Pair</button>
     </header>
 
-    <section id="status" role="status">Checking connection…</section>
+    <section id="status" role="status" data-state="pending">Checking connection…</section>
+    <div class="workspace">
+    <section class="conversation" aria-label="Chat workspace">
     <section class="starters" aria-label="Try a question">
       <button type="button" data-prompt="Explain why the sky is blue">Explain something</button>
       <button type="button" data-prompt="What time is it in Vancouver?">Check the time</button>
@@ -36,19 +38,30 @@
       </label>
       <label class="inline"><input id="showSources" type="checkbox" checked> Show sources</label>
     </div>
-    <section id="chat" role="log" aria-label="Conversation" aria-live="polite">
-      <p id="emptyChat" class="hint">Start with a question above, or write your own below.</p>
+    <div class="chat-container">
+    <section id="chat" role="log" aria-label="Conversation" aria-live="polite" tabindex="0">
+      <div id="emptyChat" class="empty-state"><span class="empty-mark" aria-hidden="true">✦</span><h2>What are you curious about?</h2><p>Choose a question above, or start with your own.</p></div>
     </section>
+    <button id="latestMessage" type="button" hidden>↓ Latest message</button>
+    </div>
 
+    <div class="composer">
+    <div id="activity" role="status" hidden><span class="spinner" aria-hidden="true"></span> Acumen is working on your question…</div>
+    <div id="recentRow" hidden>
     <label class="recent-label" for="recentQuestions">Recent questions</label>
     <select id="recentQuestions" disabled><option value="">Your questions will appear here</option></select>
+    </div>
     <form id="form">
       <label class="sr-only" for="message">Your message</label>
-      <textarea id="message" rows="3" autocomplete="off" placeholder="Ask Acumen a question…" required></textarea>
+      <textarea id="message" rows="1" autocomplete="off" placeholder="Ask Acumen a question…" aria-describedby="composerHint" required></textarea>
       <button id="sendBtn">Send</button>
     </form>
-    <p class="hint">Enter to send · Shift+Enter for a new line · ↑ in an empty box recalls your last question. Unsent drafts recover after a refresh in this tab; export chat to keep your answers.</p>
+    <p class="hint" id="composerHint">Enter to send · Shift+Enter for a new line · Drafts saved in this tab</p>
+    </div>
+    </section>
 
+    <aside aria-label="Learning and knowledge">
+    <div class="aside-heading"><span class="eyebrow">YOUR NOTEBOOK</span><h2>Keep the useful bits.</h2><p class="hint">Review what Acumen learns and choose what to save.</p></div>
     <details id="learningPanel">
       <summary>New learning <span id="learningCount">(0)</span></summary>
       <p class="hint">Review these answers, then save or discard them. Saving keeps them on your local computer.</p>
@@ -59,13 +72,16 @@
       </div>
     </details>
 
-    <details>
+    <details id="knowledgePanel">
       <summary>Saved knowledge</summary>
       <button id="refreshKnowledge" type="button">Refresh</button>
       <label for="knowledgeSearch">Search questions and answers</label>
       <input id="knowledgeSearch" type="search" placeholder="Filter saved knowledge…">
-      <div id="knowledge"></div>
+      <div id="knowledge">Open this panel to browse your saved answers.</div>
     </details>
+    <p class="privacy-note">Saved knowledge stays on your computer. Export your chat to keep a copy of the conversation.</p>
+    </aside>
+    </div>
   </main>
 
   <dialog id="settings">
@@ -80,6 +96,7 @@
         <input id="token" type="password">
       </label>
       <p class="hint">Paste the pairing token printed in the terminal when you start bridge.py. A custom token in config.yaml is also used there.</p>
+      <p id="pairError" role="alert" hidden></p>
       <button id="saveSettings" value="default">Save and connect</button>
       <button value="cancel">Cancel</button>
     </form>

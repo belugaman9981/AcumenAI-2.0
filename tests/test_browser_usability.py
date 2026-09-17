@@ -49,11 +49,19 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             playwright.expect(page.locator("#status")).to_contain_text("Pairing token not accepted")
             page.locator("#settingsBtn").click()
             playwright.expect(page.locator("#bridgeUrl")).to_have_value(origin if same_origin else bridge_url)
+            page.locator("#token").fill("wrong-token")
+            page.locator("#saveSettings").click()
+            playwright.expect(page.locator("#pairError")).to_contain_text("Pairing token not accepted")
+            playwright.expect(page.locator("#settings")).to_be_visible()
             page.locator("#token").fill("browser-test-token")
             page.locator("#saveSettings").click()
             playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator("#settings")).not_to_be_visible()
 
             page.locator("#theme").select_option("dark")
+            initial_height = page.locator("#message").bounding_box()["height"]
+            page.locator("#message").fill("First line\nSecond line\nThird line\nFourth line")
+            assert page.locator("#message").bounding_box()["height"] > initial_height
             page.locator("#message").fill("An unfinished question\nwith another line")
             page.reload()
             playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
@@ -122,13 +130,22 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
                     page.locator("#message").press("Enter")
                     assert started.wait(timeout=5)
                     playwright.expect(page.locator("#sendBtn")).to_be_disabled()
+                    playwright.expect(page.locator("#activity")).to_be_visible()
                     page.locator("#message").fill("My next draft")
                     page.locator("#message").press("Enter")
                     playwright.expect(page.locator("#message")).to_have_value("My next draft")
+                    page.locator("#chat").evaluate("element => { element.scrollTop = 0; }")
+                    playwright.expect(page.locator("#latestMessage")).to_be_visible()
                     assert execute.call_count == 1
                 finally:
                     release.set()
                 playwright.expect(page.locator(".acumen .message-text").last).to_have_text("22")
+            playwright.expect(page.locator("#activity")).not_to_be_visible()
+            assert page.locator("#chat").evaluate("element => element.scrollTop") == 0
+            page.emulate_media(reduced_motion="reduce")
+            page.locator("#latestMessage").click()
+            playwright.expect(page.locator("#latestMessage")).not_to_be_visible()
+            assert page.locator(".msg").last.evaluate("element => getComputedStyle(element).animationName") == "none"
             playwright.expect(page.locator("#message")).to_have_value("My next draft")
             playwright.expect(page.locator("#learningCount")).to_have_text("(1)")
             page.once("dialog", lambda dialog: dialog.accept())
@@ -150,6 +167,9 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             page.locator(".delete-knowledge").click()
             playwright.expect(page.locator("#knowledge .knowledge-item")).to_have_count(0)
             assert len(client.knowledge.all()) == 1
+            page.locator("#theme").select_option("dark")
+            page.screenshot(path=str(project / ".pytest_cache" / f"acumen-desktop-{same_origin}.png"), full_page=True)
+            page.locator("#theme").select_option("light")
             page.once("dialog", lambda dialog: dialog.accept())
             page.locator("#clearChat").click()
             playwright.expect(page.locator(".msg")).to_have_count(0)
@@ -159,7 +179,15 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
 
             page.set_viewport_size({"width": 390, "height": 844})
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            page.locator("#message").fill("A narrow screen draft\nwith a second line")
+            assert page.locator("#sendBtn").bounding_box()["x"] >= 0
             page.screenshot(path=str(project / ".pytest_cache" / "acumen-mobile.png"), full_page=True)
+            page.set_viewport_size({"width": 320, "height": 640})
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            page.locator("#settingsBtn").click()
+            playwright.expect(page.locator("#token")).to_be_visible()
+            page.get_by_role("button", name="Cancel", exact=True).click()
+            playwright.expect(page.locator("#settings")).not_to_be_visible()
             assert not errors
             context.close()
             browser.close()

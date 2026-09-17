@@ -2,9 +2,28 @@ const $ = (selector) => document.querySelector(selector);
 const chat = $("#chat"), statusBox = $("#status"), settings = $("#settings");
 let busy = false, transcript = [], savedKnowledge = [], pendingCount = 0, sourcesShown = true;
 let recentQuestions = [];
+let pairedConfig = null, pairing = false;
+const emptyState = $("#emptyChat").cloneNode(true);
+function setStatus(text, state = "connected") {
+  statusBox.textContent = text;
+  statusBox.dataset.state = state;
+}
+function resizeComposer() {
+  const input = $("#message");
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+  input.style.overflowY = input.scrollHeight > 180 ? "auto" : "hidden";
+}
+function nearLatest() { return chat.scrollHeight - chat.scrollTop - chat.clientHeight < 60; }
+function updateLatest() { $("#latestMessage").hidden = nearLatest(); }
+chat.addEventListener("scroll", updateLatest, {passive: true});
+$("#latestMessage").onclick = () => chat.scrollTo({top: chat.scrollHeight,
+  behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth"});
+window.addEventListener("resize", () => { resizeComposer(); updateLatest(); });
 
 function draftKey() { return `acumen_draft:${cfg().url}`; }
 function saveDraft() {
+  resizeComposer();
   try {
     const value = $("#message").value;
     if (value) sessionStorage.setItem(draftKey(), value);
@@ -14,6 +33,7 @@ function saveDraft() {
 function restoreDraft() {
   try { $("#message").value = sessionStorage.getItem(draftKey()) || ""; }
   catch { $("#message").value = ""; }
+  resizeComposer();
 }
 function fillDraft(value) {
   $("#message").value = value;
@@ -25,6 +45,7 @@ function renderRecent() {
   select.replaceChildren(new Option(recentQuestions.length ? "Choose a question to edit or send again…" : "Your questions will appear here", ""));
   recentQuestions.forEach((question, index) => select.add(new Option(question, String(index))));
   select.disabled = !recentQuestions.length;
+  $("#recentRow").hidden = !recentQuestions.length;
 }
 function applyTheme(value) {
   const theme = ["light", "dark"].includes(value) ? value : "system";
@@ -45,6 +66,7 @@ $("#message").addEventListener("input", saveDraft);
 restoreDraft();
 
 function cfg() {
+  if (pairedConfig) return pairedConfig;
   const localPage = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
   const defaults = {url: localPage ? location.origin : "http://127.0.0.1:8765", token: ""};
   try {
@@ -63,9 +85,11 @@ function setBusy(value) {
   document.querySelectorAll(".retry, .repeat, .delete-knowledge").forEach(button => { button.disabled = value; });
 }
 function add(role, text, retryQuestion = null, failed = false) {
+  const follow = role === "user" || nearLatest();
   $("#emptyChat")?.remove();
   const message = document.createElement("article");
   message.className = `msg ${role}`;
+  message.classList.toggle("failed", failed);
   const heading = document.createElement("strong"), content = document.createElement("div");
   heading.textContent = role === "user" ? "You" : "Acumen";
   content.className = "message-text";
@@ -89,11 +113,11 @@ function add(role, text, retryQuestion = null, failed = false) {
   }
   transcript.push({role, text});
   chat.append(message);
-  message.scrollIntoView({behavior: "smooth", block: "nearest"});
+  if (follow) chat.scrollTop = role === "user" ? chat.scrollHeight : message.offsetTop - 20;
+  updateLatest();
   setBusy(busy);
 }
-async function api(path, options = {}) {
-  const config = cfg();
+async function api(path, options = {}, config = cfg()) {
   let response;
   try {
     response = await fetch(config.url.replace(/\/+$/, "") + path, {...options,
@@ -138,8 +162,8 @@ async function refreshSession() {
   setBusy(busy);
 }
 async function check() {
-  try { await refreshSession(); statusBox.textContent = "Connected and paired with local Acumen"; }
-  catch (error) { statusBox.textContent = error.message; pendingCount = 0; setBusy(busy); }
+  try { await refreshSession(); setStatus("Connected and paired with local Acumen"); }
+  catch (error) { setStatus(error.message, "error"); pendingCount = 0; setBusy(busy); }
 }
 async function send(text) {
   if (busy || !text.trim()) return;
@@ -149,13 +173,19 @@ async function send(text) {
   }
   setBusy(true);
   add("user", text);
+  $("#activity").hidden = false;
   try {
     const result = await api("/api/chat", {method: "POST", body: JSON.stringify({message: text})});
     add("acumen", result.reply || "No reply received.", text.startsWith("/") ? null : text);
-    try { await refreshSession(); statusBox.textContent = "Connected and paired with local Acumen"; }
-    catch (error) { statusBox.textContent = error.message; }
-  } catch (error) { add("acumen", error.message, text, true); statusBox.textContent = error.message; }
-  finally { setBusy(false); $("#message").focus(); }
+    try { await refreshSession(); setStatus("Connected and paired with local Acumen"); }
+    catch (error) { setStatus(error.message, "error"); }
+  } catch (error) { add("acumen", error.message, text, true); setStatus(error.message, "error"); }
+  finally {
+    $("#activity").hidden = true;
+    setBusy(false);
+    // Do not move focus away from controls the user selected while waiting.
+    if (document.activeElement === $("#sendBtn")) $("#message").focus({preventScroll: true});
+  }
 }
 $("#form").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -164,6 +194,7 @@ $("#form").addEventListener("submit", (event) => {
   if (!text) return;
   input.value = "";
   saveDraft();
+  input.focus({preventScroll: true});
   send(text);
 });
 $("#message").addEventListener("keydown", (event) => {
@@ -184,8 +215,8 @@ $("#showSources").onchange = async () => {
   try {
     await api("/api/chat", {method: "POST", body: JSON.stringify({message: wanted ? "/show-source" : "/hide-source"})});
     sourcesShown = wanted;
-    statusBox.textContent = `Sources ${wanted ? "shown" : "hidden"} for future answers.`;
-  } catch (error) { $("#showSources").checked = sourcesShown; statusBox.textContent = error.message; }
+    setStatus(`Sources ${wanted ? "shown" : "hidden"} for future answers.`);
+  } catch (error) { $("#showSources").checked = sourcesShown; setStatus(error.message, "error"); }
   finally { setBusy(false); }
 };
 $("#exportChat").onclick = () => {
@@ -201,12 +232,8 @@ $("#clearChat").onclick = () => {
   transcript = [];
   recentQuestions = [];
   renderRecent();
-  chat.replaceChildren();
-  const empty = document.createElement("p");
-  empty.id = "emptyChat";
-  empty.className = "hint";
-  empty.textContent = "Start with a question above, or write your own below.";
-  chat.append(empty);
+  chat.replaceChildren(emptyState.cloneNode(true));
+  updateLatest();
   setBusy(false);
   $("#message").focus();
 };
@@ -214,24 +241,51 @@ $("#settingsBtn").onclick = () => {
   const config = cfg();
   $("#bridgeUrl").value = config.url;
   $("#token").value = config.token;
+  $("#pairError").hidden = true;
   settings.showModal();
 };
-$("#saveSettings").onclick = (event) => {
+settings.addEventListener("cancel", event => { if (pairing) event.preventDefault(); });
+$("#settings form").addEventListener("submit", async (event) => {
+  if (event.submitter?.value === "cancel") return;
+  event.preventDefault();
+  if (pairing) return;
+  let candidate;
   try {
     const url = new URL($("#bridgeUrl").value.trim());
-    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error();
-    localStorage.setItem("acumen_bridge", url.href.replace(/\/+$/, ""));
-    localStorage.setItem("acumen_token", $("#token").value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error();
+    candidate = {url: url.href.replace(/\/+$/, ""), token: $("#token").value.trim()};
+  } catch {
+    $("#bridgeUrl").setCustomValidity("Enter an http:// or https:// bridge URL without a username, password, query, or fragment.");
+    $("#bridgeUrl").reportValidity();
+    return;
+  }
+  pairing = true;
+  $("#pairError").hidden = true;
+  settings.querySelectorAll("button, input").forEach(control => { control.disabled = true; });
+  $("#saveSettings").textContent = "Connecting…";
+  try {
+    await api("/api/session", {signal: AbortSignal.timeout(10000)}, candidate);
+    pairedConfig = candidate;
+    try {
+      localStorage.setItem("acumen_bridge", candidate.url);
+      localStorage.setItem("acumen_token", candidate.token);
+    } catch { /* Pairing still works for this page when storage is unavailable. */ }
     restoreDraft();
     savedKnowledge = [];
     renderKnowledge();
-    check();
-  } catch {
-    event.preventDefault();
-    $("#bridgeUrl").setCustomValidity("Enter an http:// or https:// bridge URL without a username or password.");
-    $("#bridgeUrl").reportValidity();
+    settings.close();
+    await check();
+    if ($("#knowledgePanel").open) await refreshKnowledge();
+    $("#message").focus({preventScroll: true});
+  } catch (error) {
+    $("#pairError").textContent = error.message;
+    $("#pairError").hidden = false;
+  } finally {
+    pairing = false;
+    settings.querySelectorAll("button, input").forEach(control => { control.disabled = false; });
+    $("#saveSettings").textContent = "Save and connect";
   }
-};
+});
 $("#bridgeUrl").oninput = () => $("#bridgeUrl").setCustomValidity("");
 function renderKnowledge() {
   const query = $("#knowledgeSearch").value.toLocaleLowerCase();
@@ -253,7 +307,7 @@ function renderKnowledge() {
         await api(`/api/knowledge/${encodeURIComponent(item.id)}`, {method: "DELETE"});
         savedKnowledge = savedKnowledge.filter(saved => saved.id !== item.id);
         renderKnowledge();
-      } catch (error) { statusBox.textContent = error.message; }
+      } catch (error) { setStatus(error.message, "error"); }
       finally { setBusy(false); }
     };
     row.append(content, button);
@@ -266,6 +320,7 @@ async function refreshKnowledge() {
   catch (error) { $("#knowledge").textContent = error.message; }
 }
 $("#refreshKnowledge").onclick = refreshKnowledge;
+$("#knowledgePanel").addEventListener("toggle", () => { if ($("#knowledgePanel").open) refreshKnowledge(); });
 $("#knowledgeSearch").oninput = renderKnowledge;
 async function resolveLearning(action) {
   if (busy) return;
@@ -273,10 +328,10 @@ async function resolveLearning(action) {
   setBusy(true);
   try {
     const result = await api("/api/session/learning", {method: "POST", body: JSON.stringify({action})});
-    statusBox.textContent = result.answer;
+    setStatus(result.answer);
     await refreshSession();
     await refreshKnowledge();
-  } catch (error) { statusBox.textContent = error.message; }
+  } catch (error) { setStatus(error.message, "error"); }
   finally { setBusy(false); }
 }
 $("#saveLearning").onclick = () => resolveLearning("save");

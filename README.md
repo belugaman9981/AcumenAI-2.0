@@ -182,6 +182,13 @@ copy buttons, chat export, and retry buttons for failed requests. Enter sends;
 Shift+Enter adds a line. You can draft the next question while Acumen works.
 The connection indicator checks your pairing token as well as the bridge.
 
+The chat scrolls independently above the composer, which grows as you type.
+Replies preserve your reading position when you scroll back; use **Latest message**
+to return to the bottom. A waiting indicator appears while Acumen answers. Learning
+panels sit beside chat on desktop and below it on smaller screens. Pairing errors
+stay in the dialog so you can correct the token, and saved knowledge loads when
+you open its panel. Animations respect your system's reduced-motion preference.
+
 Choose a System, Light, or Dark theme. Unsent drafts recover after refreshing the
 same tab. The recent-question menu keeps ten distinct questions for quick editing;
 Up in an empty message box recalls the last one. **Ask again** repeats a question
