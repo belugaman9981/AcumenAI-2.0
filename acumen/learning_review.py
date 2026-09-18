@@ -4,12 +4,22 @@ from .learning import assess_learning
 
 
 def _passages(candidate):
-    return {
-        (item.get("url", "").strip(), " ".join(item.get("text", "").split()).casefold())
-        for item in candidate.get("evidence", [])
-        if isinstance(item, dict) and item.get("kind") == "page"
-        and isinstance(item.get("url"), str) and isinstance(item.get("text"), str)
-    }
+    answer = " ".join(candidate.get("answer", "").split()).casefold()
+    supported = set()
+    for item in candidate.get("evidence", []):
+        if not isinstance(item, dict) or not isinstance(item.get("text"), str):
+            continue
+        passage = " ".join(item["text"].split()).casefold()
+        if not passage or f" {passage} " not in f" {answer} ":
+            continue
+        # Use the same URL and evidence checks as the learning gate. Unused or
+        # uncited passages must not make a repeat look like stronger evidence.
+        assessment = assess_learning({"answer": item["text"], "kind": "research",
+                                      "confidence": .6, "sources": candidate.get("sources", []),
+                                      "evidence": [item]})
+        if assessment["eligible"]:
+            supported.add((item["url"].strip(), passage))
+    return supported
 
 
 def adds_evidence(candidate, saved):

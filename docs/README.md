@@ -48,6 +48,12 @@ for one item, or **Save all** / **Discard all** for the whole list. Other pendin
 items stay available after an individual action. If an item changed in another
 tab, refresh the connection before reviewing it again. Expand **Saved knowledge**
 to refresh, filter, or delete saved items.
+Learning summaries explain whether an answer is new, adds supporting passages,
+rechecks older knowledge, or differs from another version. Expand **Compare other
+answers** when versions differ. Research learning requires retained page evidence
+covering the whole answer; a URL alone is insufficient. Saved research is normally
+rechecked after 30 days. Discarded answers are suppressed for the rest of the same
+bridge session (latest 256 decisions), while different answers remain eligible.
 The last 100 messages and recent questions recover after refreshing the same tab,
 using browser session storage. Export chat for a lasting copy; closing the tab or
 clearing browser storage can remove recovery data. Pairing settings are saved in

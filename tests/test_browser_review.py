@@ -2,6 +2,7 @@
 from copy import deepcopy
 from pathlib import Path
 from threading import Thread
+from unittest.mock import patch
 
 import pytest
 from werkzeug.serving import make_server
@@ -71,6 +72,7 @@ def test_find_chat_and_review_individual_answers(tmp_path):
 
             page.locator("#learningPanel summary").click()
             first = page.locator("#learning .knowledge-item").filter(has_text="calculate 6*7")
+            playwright.expect(first).to_contain_text("Supported by a local symbolic calculation.")
             first.get_by_role("button", name="Save answer", exact=True).click()
             playwright.expect(page.locator("#learningCount")).to_have_text("(1)")
             assert [item["answer"] for item in client.knowledge.all()] == ["42"]
@@ -84,6 +86,53 @@ def test_find_chat_and_review_individual_answers(tmp_path):
             playwright.expect(page.locator("#learningCount")).to_have_text("(0)")
             assert [item["answer"] for item in client.knowledge.all()] == ["42"]
             playwright.expect(page.locator("#message")).to_have_value("Keep my draft while I review")
+
+            # Research answers go through the real chat endpoint and review UI.
+            question = "Why is the sky blue?"
+            answer = "The sky is blue because air scatters blue light."
+            alternate = "Air scatters short wavelengths strongly, making the sky appear blue."
+
+            def result(text):
+                return {"ok": True, "answer": text, "confidence": .7,
+                        "sources": [{"url": "https://example.org/sky", "title": "Sky"}],
+                        "evidence": [{"url": "https://example.org/sky", "text": text, "kind": "page"}]}
+
+            with patch.object(client.local_processor.researcher, "research", return_value=result(answer)) as research:
+                page.locator("#message").fill(question)
+                page.locator("#message").press("Enter")
+                playwright.expect(page.locator(".acumen .message-text").last).to_contain_text(answer)
+                playwright.expect(page.locator("#learningCount")).to_have_text("(1)")
+                candidate = page.locator("#learning .knowledge-item")
+                playwright.expect(candidate).to_contain_text("New answer")
+                playwright.expect(candidate).to_contain_text("1 supported passage from 1 source page.")
+                candidate.get_by_role("button", name="Save answer", exact=True).click()
+                playwright.expect(page.locator("#learningCount")).to_have_text("(0)")
+                page.locator("#message").fill(question)
+                page.locator("#message").press("Enter")
+                playwright.expect(page.locator("#sendBtn")).to_be_enabled()
+                playwright.expect(page.locator(".acumen .message-text").last).to_contain_text(answer)
+                assert research.call_count == 1
+
+            with patch.object(client.local_processor.researcher, "research", return_value=result(alternate)):
+                client.local_processor.process("research", {"query": question}, client.session_id)
+            page.reload()
+            playwright.expect(page.locator("#status")).to_contain_text("Connected and paired")
+            playwright.expect(page.locator("#learningCount")).to_have_text("(1)")
+            if not page.locator("#learningPanel").evaluate("element => element.open"):
+                page.locator("#learningPanel > summary").click()
+            candidate = page.locator("#learning .knowledge-item")
+            playwright.expect(candidate).to_contain_text("Different answer to review")
+            candidate.get_by_text("Compare other answers", exact=True).click()
+            playwright.expect(candidate).to_contain_text(answer)
+            playwright.expect(candidate).to_contain_text(alternate)
+            page.set_viewport_size({"width": 320, "height": 640})
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.screenshot(path=str(tmp_path / "learning-review-mobile.png"), full_page=True)
+            page.set_viewport_size({"width": 1100, "height": 900})
+            page.screenshot(path=str(tmp_path / "learning-review-desktop.png"), full_page=True)
+            candidate.get_by_role("button", name="Save answer", exact=True).click()
+            playwright.expect(page.locator("#learningCount")).to_have_text("(0)")
+            assert {item["answer"] for item in client.knowledge.all()} == {"42", answer, alternate}
 
             page.set_viewport_size({"width": 320, "height": 640})
             page.locator("#findChat").click()

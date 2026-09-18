@@ -296,12 +296,33 @@ Explicit search requests still fetch again. Short topics, explanation requests,
 and yes/no questions are routed to research, and repeated answers record usage
 without increasing their confidence.
 
-Automatic learning requires a successful answer, a source URL, and a confidence
-score of at least 0.6. These scores are heuristics, not calibrated probabilities.
-Snippet-only answers can be displayed but do not become learning candidates;
-each selected passage needs page support. Matching passages from multiple sources
-retain their provenance without repeating the sentence in the answer. Live-data
-queries use the same freshness rules for retrieval, caching, and learning.
+Automatic learning requires a successful answer and a finite confidence score of
+at least 0.6. For research, **the whole answer must be covered by retained page
+passages whose URLs match its cited sources**. A source link alone, a search
+snippet, or evidence for only part of an answer is insufficient. Local symbolic
+calculations use their own support check. Confidence scores remain heuristics,
+not calibrated probabilities or guarantees of truth. Matching passages from
+multiple sources retain their provenance without repeating the sentence.
+
+Saved research is rechecked after **30 days** by default. Set
+`learning.recheck_after_days` in `config.yaml` to another positive number. Saving
+an old candidate, merging a snapshot, or asking the same question again does not
+reset its research date. Undated or invalidly dated legacy answers stay available
+in Saved knowledge, but are researched again before automatic reuse. Local SymPy
+calculations do not expire; live-data questions still bypass stored answers.
+
+Already-saved, recent answers are not offered as new learning again unless they
+bring additional supporting page passages. The review panel labels new answers,
+added evidence, rechecked answers, and differing versions; **Compare other
+answers** lets you inspect differences before saving. Different wording is a
+reason to review, not proof that either version is wrong. Saving a conflicting
+answer preserves both versions; remove an obsolete saved version explicitly.
+
+Discarding an answer suppresses the same answer for the rest of that learning
+session, even if another fetch repeats it. A different answer can still be
+reviewed. This feedback remembers the latest 256 discarded answer fingerprints,
+is shared by tabs on the same bridge, and resets when you start a new server or
+CLI session. It never deletes previously saved knowledge.
 
 The save, review, or discard choice below still controls permanent learning.
 

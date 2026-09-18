@@ -1,6 +1,8 @@
 import json
 from unittest.mock import patch
 
+import pytest
+
 from acumen.knowledge import (
     KnowledgeStore,
     candidate_fingerprint,
@@ -128,6 +130,28 @@ def test_other_store_instances_see_writes_and_deletions(tmp_path):
     assert second.all()[0]["id"] == saved["id"]
     assert second.delete(saved["id"])
     assert first.all() == []
+
+
+def test_failed_knowledge_save_does_not_become_available_for_reuse(tmp_path):
+    store = KnowledgeStore(tmp_path)
+    original = store.add({"query": "Where is Ottawa?", "answer": "Canada"})
+    before = store.path.read_bytes()
+    with patch("acumen.knowledge.atomic_write_json", side_effect=OSError("disk unavailable")):
+        with pytest.raises(OSError):
+            store.add({"query": "Where is Ottawa?", "answer": "A different answer"})
+    assert store.path.read_bytes() == before
+    assert store.all() == [original]
+    assert store.lookup("Where is Ottawa?")["answer"] == "Canada"
+
+
+def test_read_results_cannot_change_saved_knowledge_without_saving(tmp_path):
+    store = KnowledgeStore(tmp_path)
+    original = store.add({"query": "Where is Ottawa?", "answer": "Canada"})
+    returned = store.all()
+    returned[0]["answer"] = "Unsaved edit"
+    returned[0]["sources"].append({"url": "https://unsaved.example"})
+    assert store.all() == [original]
+    assert store.lookup("Where is Ottawa?")["answer"] == "Canada"
 
 
 def test_repeated_evidence_merges_by_passage_and_url_retaining_best_score():

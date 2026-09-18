@@ -272,7 +272,9 @@ async function refreshSession() {
       label.className = review.status === "conflict" ? "learning-conflict" : "learning-label";
       label.textContent = review.label;
       detail.textContent = review.detail;
-      support.textContent = review.reason;
+      support.textContent = review.support === "page"
+        ? `${review.passage_count} supported passage${review.passage_count === 1 ? "" : "s"} from ${review.source_count} source page${review.source_count === 1 ? "" : "s"}. ${review.reason}`
+        : review.reason;
       summary.append(label, detail, support);
       if (review.other_answers?.length) {
         const comparison = document.createElement("details"), heading = document.createElement("summary");

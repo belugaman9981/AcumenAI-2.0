@@ -40,11 +40,11 @@ class TaskProcessor:
             return
         if requires_fresh_data(query):
             return
-        candidate = clean_candidate(self._candidate(query, result, kind))
-        if not assess_learning(candidate)["eligible"]:
+        raw_candidate = self._candidate(query, result, kind)
+        if not assess_learning(raw_candidate)["eligible"]:
             return
-        saved = self.knowledge.all()
-        existing = select_answer(saved, query, max_age_days=self._recheck_days())
+        candidate = clean_candidate(raw_candidate)
+        existing = select_answer(self.knowledge.all(), query, max_age_days=self._recheck_days())
         if (existing and candidate_fingerprint(existing) == candidate_fingerprint(candidate)
                 and not adds_evidence(candidate, [existing])):
             return
