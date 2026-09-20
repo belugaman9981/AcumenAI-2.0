@@ -405,6 +405,9 @@ python main.py --mode local --root data
 ```
 
 Local mode executes web tasks directly and asks whether to save learning when you exit.
+Use `python main.py --ask "calculate 6*7"` to answer one question and return to
+your shell. Run `python main.py --help` to see all launch options; `--color never`
+keeps output plain when you are redirecting it to a file or another program.
 
 ## Optional GitHub Pages UI
 
