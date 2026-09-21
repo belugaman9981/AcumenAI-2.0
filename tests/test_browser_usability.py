@@ -86,6 +86,12 @@ def test_browser_chat_and_learning(tmp_path, same_origin):
             page.get_by_role("button", name="Copy", exact=True).last.click()
             playwright.expect(page.get_by_role("button", name="Copied", exact=True)).to_be_visible()
             assert "x = 4" in page.evaluate("navigator.clipboard.readText()")
+            page.locator("#helpBtn").focus()
+            page.keyboard.press("Control+K")
+            playwright.expect(page.locator("#message")).to_be_focused()
+            page.locator("#copyChat").click()
+            playwright.expect(page.locator("#copyChat")).to_have_text("Copied")
+            assert "You: Solve 2*x + 3 = 11" in page.evaluate("navigator.clipboard.readText()")
             assert page.evaluate("Object.keys(sessionStorage).filter(key => key.startsWith('acumen_draft:')).length") == 0
             page.locator("#message").press("ArrowUp")
             playwright.expect(page.locator("#message")).to_have_value("Solve 2*x + 3 = 11")

@@ -178,7 +178,7 @@ and retains source links for the sentences it actually uses.
 ## Everyday controls
 
 The browser UI includes starter questions, a multiline composer, a source toggle,
-copy buttons, chat export, and retry buttons for failed requests. Enter sends;
+answer and full-chat copy buttons, chat export, and retry buttons for failed requests. Enter sends;
 Shift+Enter adds a line. You can draft the next question while Acumen works.
 The connection indicator checks your pairing token as well as the bridge.
 
@@ -406,8 +406,10 @@ python main.py --mode local --root data
 
 Local mode executes web tasks directly and asks whether to save learning when you exit.
 Use `python main.py --ask "calculate 6*7"` to answer one question and return to
-your shell. Run `python main.py --help` to see all launch options; `--color never`
-keeps output plain when you are redirecting it to a file or another program.
+your shell. Add `--output answer.txt` to save its plain UTF-8 answer, or
+`--no-sources` to omit source links. Run `python main.py --help` to see all launch
+options; `--color never` keeps output plain when you are redirecting it to a file
+or another program.
 
 ## Optional GitHub Pages UI
 

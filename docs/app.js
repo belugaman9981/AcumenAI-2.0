@@ -187,6 +187,7 @@ function setBusy(value) {
   $("#reconnectBtn").disabled = value || checking || pairing;
   $("#clearChat").disabled = value || !transcript.length;
   $("#exportChat").disabled = !transcript.length;
+  $("#copyChat").disabled = !transcript.length;
   $("#findChat").disabled = !transcript.length;
   $("#saveLearning").disabled = $("#discardLearning").disabled = value || !pendingCount;
   document.querySelectorAll(".retry, .repeat, .delete-knowledge, .review-learning").forEach(button => { button.disabled = value; });
@@ -385,6 +386,12 @@ $("#message").addEventListener("keydown", (event) => {
     fillDraft(recentQuestions[0]);
   }
 });
+document.addEventListener("keydown", event => {
+  if (event.isComposing || event.shiftKey || event.altKey || !(event.ctrlKey || event.metaKey)
+      || event.key.toLowerCase() !== "k" || settings.open) return;
+  event.preventDefault();
+  $("#message").focus({preventScroll: true});
+});
 document.querySelectorAll("[data-prompt]").forEach(button => {
   button.onclick = () => fillDraft(button.dataset.prompt);
 });
@@ -408,6 +415,19 @@ $("#exportChat").onclick = () => {
   link.download = "acumen-chat.txt";
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+$("#copyChat").onclick = async () => {
+  const button = $("#copyChat");
+  const text = transcript.map(item => `${item.role === "user" ? "You" : "Acumen"}: ${item.text}`).join("\n\n");
+  if (!text) return;
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+    await navigator.clipboard.writeText(text);
+    button.textContent = "Copied";
+  } catch {
+    button.textContent = "Clipboard unavailable";
+  }
+  setTimeout(() => { button.textContent = "Copy chat"; }, 2000);
 };
 $("#clearChat").onclick = () => {
   if (busy || !confirm("Clear the chat display? Export first if you want a copy. Saved and pending learning will stay.")) return;

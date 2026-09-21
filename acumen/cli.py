@@ -27,6 +27,10 @@ def build_parser():
                         help="Configuration file to load (default: config.yaml).")
     parser.add_argument("--ask", metavar="QUESTION",
                         help="Answer one question, then exit instead of opening the prompt.")
+    parser.add_argument("--output", metavar="FILE",
+                        help="Write a one-shot answer to a UTF-8 file.")
+    parser.add_argument("--no-sources", action="store_true",
+                        help="Hide source links in answers for this session.")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Use terminal color automatically, always, or never (default: auto).")
     parser.add_argument("--version", action="version", version=f"AcumenAI 2.0 v{__version__}")
@@ -63,7 +67,10 @@ def print_welcome(mode, root, color):
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.output and not args.ask:
+        parser.error("--output requires --ask.")
     color = use_color(args.color)
 
     cfg = load_config(args.config)
@@ -71,10 +78,17 @@ def main(argv=None):
     root.mkdir(parents=True, exist_ok=True)
 
     client = AcumenClient(args.mode, root, cfg)
+    if args.no_sources:
+        client.show_sources = False
 
     try:
         if args.ask:
-            print_answer(client.chat(args.ask), color)
+            answer = client.chat(args.ask)
+            if args.output:
+                output = Path(args.output).expanduser()
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(f"{answer.rstrip()}\n", encoding="utf-8")
+            print_answer(answer, color)
             return
 
         print_welcome(args.mode, root, color)
