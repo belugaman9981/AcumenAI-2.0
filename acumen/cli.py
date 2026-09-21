@@ -1,6 +1,7 @@
 import argparse
 import os
 from pathlib import Path
+import shutil
 import sys
 
 from .config import load_config
@@ -49,21 +50,43 @@ def styled(text, code, color):
     return f"\033[{code}m{text}\033[0m" if color else text
 
 
+def terminal_width():
+    return max(48, min(shutil.get_terminal_size(fallback=(80, 24)).columns, 96))
+
+
+def divider(color, character="-"):
+    return styled(character * terminal_width(), "2;36", color)
+
+
+def clear_terminal():
+    if sys.stdout.isatty():
+        print("\033[2J\033[H", end="")
+
+
 def print_answer(answer, color):
-    print(f"\n{styled('ACUMEN', '1;36', color)}")
+    print()
+    print(divider(color))
+    print(styled("ACUMEN", "1;36", color))
+    print(divider(color))
     print(answer)
 
 
 def print_welcome(mode, root, color):
+    print()
+    print(divider(color, "="))
     print(styled("ACUMENAI 2.0", "1;36", color))
-    print(styled(f"v{__version__}  |  {mode.upper()} MODE  |  {root}", "2", color))
+    print(styled(f"v{__version__} | {mode.upper()} MODE", "2", color))
+    print(f"Storage: {root}")
+    print(divider(color, "="))
     print()
     if mode == "pi":
         print("Answers run through the local worker; learning stays on that computer.")
     else:
         print("Answers and learning stay on this computer.")
-    print("Ask anything, or use /examples for ideas and /help for commands.")
-    print("Use /learning to review new answers before you close the session.")
+    print()
+    print(styled("QUICK COMMANDS", "1;36", color))
+    print("/examples for ideas  |  /learning to review answers  |  /status for session details")
+    print("/help for all commands  |  /clear to redraw  |  /quit to exit")
 
 
 def main(argv=None):
@@ -95,6 +118,10 @@ def main(argv=None):
         while True:
             text = input(f"\n{styled('You', '1;33', color)} > ").strip()
             if not text:
+                continue
+            if text.lower() in {"/clear", "clear"}:
+                clear_terminal()
+                print_welcome(args.mode, root, color)
                 continue
             if text.lower() in {"/quit", "/exit", "quit", "exit"}:
                 print(styled("Session ended.", "2", color))

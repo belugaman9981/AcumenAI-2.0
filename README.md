@@ -409,7 +409,8 @@ Use `python main.py --ask "calculate 6*7"` to answer one question and return to
 your shell. Add `--output answer.txt` to save its plain UTF-8 answer, or
 `--no-sources` to omit source links. Run `python main.py --help` to see all launch
 options; `--color never` keeps output plain when you are redirecting it to a file
-or another program.
+or another program. In the interactive CLI, use `/clear` to redraw the welcome
+screen without sending a request.
 
 ## Optional GitHub Pages UI
 
